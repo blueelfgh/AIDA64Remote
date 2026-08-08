@@ -38,21 +38,33 @@ import androidx.glance.text.TextStyle
 import com.example.aida64remote.MainActivity
 import com.example.aida64remote.R
 
-private val ColorBg = Color(0xF0121216)
-private val ColorPanel = Color(0xFF222228)
-private val ColorText = Color(0xFFF5F5F7)
-private val ColorMuted = Color(0xFF9A9AA3)
-private val ColorYellow = Color(0xFFFFE14D)
-private val ColorCyan = Color(0xFF7EC8FF)
-private val ColorGreen = Color(0xFF4CD964)
-private val ColorRed = Color(0xFFFF5C5C)
-private val ColorTrack = Color(0xFF3A3A42)
+internal val ColorBg = Color(0xF0121216)
+internal val ColorPanel = Color(0xFF1C1C22)
+internal val ColorText = Color(0xFFF5F5F7)
+internal val ColorMuted = Color(0xFF8B8B96)
+internal val ColorYellow = Color(0xFFFFE14D)
+internal val ColorCyan = Color(0xFF5EC8FF)
+internal val ColorGreen = Color(0xFF3DDC84)
+internal val ColorRed = Color(0xFFFF5C5C)
+internal val ColorTrack = Color(0xFF2E2E36)
+internal val ColorRam = Color(0xFFB39DFF)
+internal val ColorNet = Color(0xFF7EE0C3)
 
-class MonitorGlanceWidget : GlanceAppWidget() {
+enum class WidgetFormFactor {
+    /** 约 2×1：仅 CPU/GPU 占用 */
+    Compact,
+    /** 约 3×2：CPU/GPU 占用 + 温度 */
+    Standard,
+    /** 约 4×3：CPU/GPU/内存/网络 */
+    Wide,
+}
+
+abstract class MonitorGlanceWidgetBase(
+    private val form: WidgetFormFactor,
+) : GlanceAppWidget() {
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        // Seed Glance prefs from DataStore once when a session starts.
         val seed = WidgetStateStore(context).current()
         provideContent {
             val prefs = currentState<Preferences>()
@@ -60,85 +72,114 @@ class MonitorGlanceWidget : GlanceAppWidget() {
                 .takeUnless { it.status == WidgetConnStatus.Idle && it.updatedAtEpochMs == 0L }
                 ?: seed
             GlanceTheme {
-                WidgetContent(state = state, context = context)
+                when (form) {
+                    WidgetFormFactor.Compact -> CompactWidgetContent(state, context)
+                    WidgetFormFactor.Standard -> StandardWidgetContent(state, context)
+                    WidgetFormFactor.Wide -> WideWidgetContent(state, context)
+                }
             }
         }
     }
 }
 
-@Composable
-private fun WidgetContent(state: WidgetUiState, context: Context) {
-    val statusColor = when (state.status) {
-        WidgetConnStatus.Ok -> ColorGreen
-        WidgetConnStatus.Error -> ColorRed
-        WidgetConnStatus.Updating,
-        WidgetConnStatus.Idle -> ColorYellow
-    }
-    val statusLabel = when (state.status) {
-        WidgetConnStatus.Ok -> context.getString(R.string.widget_status_ok)
-        WidgetConnStatus.Error -> context.getString(R.string.widget_status_error)
-        WidgetConnStatus.Updating -> context.getString(R.string.widget_status_updating)
-        WidgetConnStatus.Idle -> context.getString(R.string.widget_status_idle)
-    }
+/** 中号（默认，兼容已添加的挂件） */
+class MonitorGlanceWidget : MonitorGlanceWidgetBase(WidgetFormFactor.Standard)
 
+class MonitorGlanceWidgetCompact : MonitorGlanceWidgetBase(WidgetFormFactor.Compact)
+
+class MonitorGlanceWidgetWide : MonitorGlanceWidgetBase(WidgetFormFactor.Wide)
+
+@Composable
+internal fun statusColor(status: WidgetConnStatus): Color = when (status) {
+    WidgetConnStatus.Ok -> ColorGreen
+    WidgetConnStatus.Error -> ColorRed
+    WidgetConnStatus.Updating,
+    WidgetConnStatus.Idle -> ColorYellow
+}
+
+@Composable
+internal fun statusLabel(status: WidgetConnStatus, context: Context): String = when (status) {
+    WidgetConnStatus.Ok -> context.getString(R.string.widget_status_ok)
+    WidgetConnStatus.Error -> context.getString(R.string.widget_status_error)
+    WidgetConnStatus.Updating -> context.getString(R.string.widget_status_updating)
+    WidgetConnStatus.Idle -> context.getString(R.string.widget_status_idle)
+}
+
+@Composable
+private fun CompactWidgetContent(state: WidgetUiState, context: Context) {
+    val accent = statusColor(state.status)
+    Row(
+        modifier = GlanceModifier
+            .fillMaxSize()
+            .cornerRadius(16.dp)
+            .background(ColorProvider(ColorBg, ColorBg))
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .clickable(actionStartActivity<MainActivity>()),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = GlanceModifier.defaultWeight()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = context.getString(R.string.widget_title),
+                    style = TextStyle(
+                        color = ColorProvider(ColorCyan, ColorCyan),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+                Spacer(modifier = GlanceModifier.width(8.dp))
+                Text(
+                    text = "● ${statusLabel(state.status, context)}",
+                    style = TextStyle(
+                        color = ColorProvider(accent, accent),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+            }
+            Spacer(modifier = GlanceModifier.height(4.dp))
+            Text(
+                text = context.getString(
+                    R.string.widget_compact_line,
+                    formatUsage(state.cpuUsage),
+                    formatUsage(state.gpuUsage),
+                ),
+                style = TextStyle(
+                    color = ColorProvider(ColorText, ColorText),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                maxLines = 1,
+            )
+        }
+        Text(
+            text = context.getString(R.string.widget_refresh),
+            style = TextStyle(
+                color = ColorProvider(ColorText, ColorText),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            ),
+            modifier = GlanceModifier
+                .cornerRadius(8.dp)
+                .background(ColorProvider(ColorPanel, ColorPanel))
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .clickable(actionRunCallback<WidgetRefreshAction>()),
+        )
+    }
+}
+
+@Composable
+private fun StandardWidgetContent(state: WidgetUiState, context: Context) {
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
-            .cornerRadius(20.dp)
+            .cornerRadius(18.dp)
             .background(ColorProvider(ColorBg, ColorBg))
-            .padding(14.dp),
+            .padding(12.dp),
     ) {
-        Row(
-            modifier = GlanceModifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = context.getString(R.string.widget_title),
-                style = TextStyle(
-                    color = ColorProvider(ColorYellow, ColorYellow),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-                modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>()),
-            )
-            Spacer(modifier = GlanceModifier.defaultWeight())
-            Text(
-                text = "● $statusLabel",
-                style = TextStyle(
-                    color = ColorProvider(statusColor, statusColor),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-            Spacer(modifier = GlanceModifier.width(10.dp))
-            Text(
-                text = context.getString(R.string.widget_refresh),
-                style = TextStyle(
-                    color = ColorProvider(ColorText, ColorText),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-                modifier = GlanceModifier
-                    .cornerRadius(8.dp)
-                    .background(ColorProvider(ColorPanel, ColorPanel))
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                    .clickable(actionRunCallback<WidgetRefreshAction>()),
-            )
-        }
-
-        if (state.updatedAtEpochMs > 0L) {
-            Spacer(modifier = GlanceModifier.height(4.dp))
-            Text(
-                text = context.getString(R.string.widget_updated_at, formatClock(state.updatedAtEpochMs)),
-                style = TextStyle(
-                    color = ColorProvider(ColorMuted, ColorMuted),
-                    fontSize = 11.sp,
-                ),
-            )
-        }
-
+        HeaderRow(state, context, titleSize = 15.sp, statusSize = 11.sp)
+        MetaLine(state, context)
         Spacer(modifier = GlanceModifier.height(8.dp))
-
         Row(
             modifier = GlanceModifier
                 .fillMaxWidth()
@@ -149,44 +190,199 @@ private fun WidgetContent(state: WidgetUiState, context: Context) {
             MetricCard(
                 title = "CPU",
                 accent = ColorYellow,
-                usage = formatUsage(state.cpuUsage),
-                temp = formatTemp(state.cpuTemp),
+                primary = formatUsage(state.cpuUsage),
+                secondary = formatTemp(state.cpuTemp),
                 progress = state.cpuUsageBar,
+                primarySize = 26.sp,
+                showBar = true,
                 modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
             )
-            Spacer(modifier = GlanceModifier.width(10.dp))
+            Spacer(modifier = GlanceModifier.width(8.dp))
             MetricCard(
                 title = "GPU",
                 accent = ColorCyan,
-                usage = formatUsage(state.gpuUsage),
-                temp = formatTemp(state.gpuTemp),
+                primary = formatUsage(state.gpuUsage),
+                secondary = formatTemp(state.gpuTemp),
                 progress = state.gpuUsageBar,
+                primarySize = 26.sp,
+                showBar = true,
                 modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
             )
         }
-
-        if (state.status == WidgetConnStatus.Error && state.message.isNotBlank()) {
-            Spacer(modifier = GlanceModifier.height(8.dp))
-            Text(
-                text = state.message,
-                style = TextStyle(
-                    color = ColorProvider(ColorMuted, ColorMuted),
-                    fontSize = 11.sp,
-                ),
-                maxLines = 1,
-            )
-        }
+        ErrorLine(state)
     }
+}
+
+@Composable
+private fun WideWidgetContent(state: WidgetUiState, context: Context) {
+    Column(
+        modifier = GlanceModifier
+            .fillMaxSize()
+            .cornerRadius(20.dp)
+            .background(ColorProvider(ColorBg, ColorBg))
+            .padding(12.dp),
+    ) {
+        HeaderRow(state, context, titleSize = 16.sp, statusSize = 11.sp)
+        MetaLine(state, context, fontSize = 11.sp)
+        Spacer(modifier = GlanceModifier.height(8.dp))
+        Column(
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .defaultWeight()
+                .clickable(actionStartActivity<MainActivity>()),
+        ) {
+            Row(
+                modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+                verticalAlignment = Alignment.Top,
+            ) {
+                MetricCard(
+                    title = "CPU",
+                    accent = ColorYellow,
+                    primary = formatUsage(state.cpuUsage),
+                    secondary = formatTemp(state.cpuTemp),
+                    tertiary = formatClockValue(state.cpuClock),
+                    progress = state.cpuUsageBar,
+                    primarySize = 22.sp,
+                    showBar = true,
+                    modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
+                )
+                Spacer(modifier = GlanceModifier.width(8.dp))
+                MetricCard(
+                    title = "GPU",
+                    accent = ColorCyan,
+                    primary = formatUsage(state.gpuUsage),
+                    secondary = formatTemp(state.gpuTemp),
+                    tertiary = formatMb(state.vramUsed, context.getString(R.string.widget_vram_label)),
+                    progress = state.gpuUsageBar,
+                    primarySize = 22.sp,
+                    showBar = true,
+                    modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
+                )
+            }
+            Spacer(modifier = GlanceModifier.height(8.dp))
+            Row(
+                modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+                verticalAlignment = Alignment.Top,
+            ) {
+                MetricCard(
+                    title = context.getString(R.string.widget_ram_title),
+                    accent = ColorRam,
+                    primary = formatUsage(state.ramUsage),
+                    secondary = formatMb(state.ramUsed, context.getString(R.string.widget_used_label)),
+                    progress = state.ramUsageBar,
+                    primarySize = 22.sp,
+                    showBar = true,
+                    modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
+                )
+                Spacer(modifier = GlanceModifier.width(8.dp))
+                MetricCard(
+                    title = context.getString(R.string.widget_net_title),
+                    accent = ColorNet,
+                    primary = formatNet(state.download, "↓"),
+                    secondary = formatNet(state.upload, "↑"),
+                    progress = 0f,
+                    primarySize = 16.sp,
+                    showBar = false,
+                    modifier = GlanceModifier.defaultWeight().fillMaxHeight(),
+                )
+            }
+        }
+        ErrorLine(state)
+    }
+}
+
+@Composable
+private fun HeaderRow(
+    state: WidgetUiState,
+    context: Context,
+    titleSize: androidx.compose.ui.unit.TextUnit,
+    statusSize: androidx.compose.ui.unit.TextUnit,
+) {
+    val accent = statusColor(state.status)
+    Row(
+        modifier = GlanceModifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = context.getString(R.string.widget_title),
+            style = TextStyle(
+                color = ColorProvider(ColorCyan, ColorCyan),
+                fontSize = titleSize,
+                fontWeight = FontWeight.Bold,
+            ),
+            modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>()),
+        )
+        Spacer(modifier = GlanceModifier.defaultWeight())
+        Text(
+            text = "● ${statusLabel(state.status, context)}",
+            style = TextStyle(
+                color = ColorProvider(accent, accent),
+                fontSize = statusSize,
+                fontWeight = FontWeight.Bold,
+            ),
+        )
+        Spacer(modifier = GlanceModifier.width(8.dp))
+        Text(
+            text = context.getString(R.string.widget_refresh),
+            style = TextStyle(
+                color = ColorProvider(ColorText, ColorText),
+                fontSize = statusSize,
+                fontWeight = FontWeight.Bold,
+            ),
+            modifier = GlanceModifier
+                .cornerRadius(8.dp)
+                .background(ColorProvider(ColorPanel, ColorPanel))
+                .padding(horizontal = 10.dp, vertical = 5.dp)
+                .clickable(actionRunCallback<WidgetRefreshAction>()),
+        )
+    }
+}
+
+@Composable
+private fun MetaLine(state: WidgetUiState, context: Context, fontSize: androidx.compose.ui.unit.TextUnit = 11.sp) {
+    if (state.hostLabel.isBlank() && state.updatedAtEpochMs <= 0L) return
+    Spacer(modifier = GlanceModifier.height(4.dp))
+    val clock = if (state.updatedAtEpochMs > 0L) formatClock(state.updatedAtEpochMs) else "—"
+    val meta = if (state.hostLabel.isNotBlank()) {
+        context.getString(R.string.widget_meta, state.hostLabel, clock)
+    } else {
+        context.getString(R.string.widget_meta_time_only, clock)
+    }
+    Text(
+        text = meta,
+        style = TextStyle(
+            color = ColorProvider(ColorMuted, ColorMuted),
+            fontSize = fontSize,
+        ),
+        maxLines = 1,
+    )
+}
+
+@Composable
+private fun ErrorLine(state: WidgetUiState) {
+    if (state.status != WidgetConnStatus.Error || state.message.isBlank()) return
+    Spacer(modifier = GlanceModifier.height(8.dp))
+    Text(
+        text = state.message,
+        style = TextStyle(
+            color = ColorProvider(ColorMuted, ColorMuted),
+            fontSize = 11.sp,
+        ),
+        maxLines = 1,
+    )
 }
 
 @Composable
 private fun MetricCard(
     title: String,
     accent: Color,
-    usage: String,
-    temp: String,
+    primary: String,
+    secondary: String,
     progress: Float,
+    primarySize: androidx.compose.ui.unit.TextUnit,
+    showBar: Boolean,
     modifier: GlanceModifier = GlanceModifier,
+    tertiary: String? = null,
 ) {
     Column(
         modifier = modifier
@@ -204,31 +400,45 @@ private fun MetricCard(
         )
         Spacer(modifier = GlanceModifier.height(4.dp))
         Text(
-            text = usage,
+            text = primary,
             style = TextStyle(
                 color = ColorProvider(ColorText, ColorText),
-                fontSize = 28.sp,
+                fontSize = primarySize,
                 fontWeight = FontWeight.Bold,
             ),
+            maxLines = 1,
         )
         Text(
-            text = temp,
+            text = secondary,
             style = TextStyle(
                 color = ColorProvider(ColorMuted, ColorMuted),
-                fontSize = 13.sp,
+                fontSize = 12.sp,
             ),
+            maxLines = 1,
         )
-        Spacer(modifier = GlanceModifier.height(8.dp))
-        LinearProgressIndicator(
-            progress = progress.coerceIn(0f, 1f),
-            modifier = GlanceModifier.fillMaxWidth().height(6.dp),
-            color = ColorProvider(accent, accent),
-            backgroundColor = ColorProvider(ColorTrack, ColorTrack),
-        )
+        if (!tertiary.isNullOrBlank()) {
+            Text(
+                text = tertiary,
+                style = TextStyle(
+                    color = ColorProvider(ColorMuted, ColorMuted),
+                    fontSize = 11.sp,
+                ),
+                maxLines = 1,
+            )
+        }
+        if (showBar) {
+            Spacer(modifier = GlanceModifier.height(6.dp))
+            LinearProgressIndicator(
+                progress = progress.coerceIn(0f, 1f),
+                modifier = GlanceModifier.fillMaxWidth().height(5.dp),
+                color = ColorProvider(accent, accent),
+                backgroundColor = ColorProvider(ColorTrack, ColorTrack),
+            )
+        }
     }
 }
 
-private fun formatUsage(raw: String): String {
+internal fun formatUsage(raw: String): String {
     if (raw.isBlank() || raw == "—") return "—"
     val cleaned = raw.replace("%", "").trim()
     val num = cleaned.toFloatOrNull()
@@ -240,17 +450,58 @@ private fun formatUsage(raw: String): String {
     }
 }
 
-private fun formatTemp(raw: String): String {
+internal fun formatTemp(raw: String): String {
     if (raw.isBlank() || raw == "—") return "— ℃"
     return if (raw.contains('°') || raw.contains('℃')) raw else "$raw℃"
 }
 
-private fun formatClock(epochMs: Long): String {
+internal fun formatClockValue(raw: String): String {
+    if (raw.isBlank() || raw == "—") return "— MHz"
+    return if (raw.contains("MHz", ignoreCase = true) || raw.contains("GHz", ignoreCase = true)) {
+        raw
+    } else {
+        "$raw MHz"
+    }
+}
+
+internal fun formatMb(raw: String, label: String): String {
+    if (raw.isBlank() || raw == "—") return "$label —"
+    val value = if (raw.contains("MB", ignoreCase = true) || raw.contains("GB", ignoreCase = true)) {
+        raw
+    } else {
+        "$raw MB"
+    }
+    return "$label $value"
+}
+
+internal fun formatNet(raw: String, arrow: String): String {
+    if (raw.isBlank() || raw == "—") return "$arrow —"
+    return if (raw.contains('/')) "$arrow $raw" else "$arrow $raw KB/s"
+}
+
+internal fun formatClock(epochMs: Long): String {
     val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMs }
     val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
     val m = cal.get(java.util.Calendar.MINUTE)
-    val s = cal.get(java.util.Calendar.SECOND)
-    return "%02d:%02d:%02d".format(h, m, s)
+    return "%02d:%02d".format(h, m)
+}
+
+private fun enqueueRefresh(context: Context) {
+    WidgetRefreshWorker.enqueue(context)
+}
+
+private fun cancelRefreshIfNoWidgets(context: Context) {
+    val am = android.appwidget.AppWidgetManager.getInstance(context)
+    val stillPlaced = listOf(
+        MonitorWidgetCompactReceiver::class.java,
+        MonitorWidgetReceiver::class.java,
+        MonitorWidgetWideReceiver::class.java,
+    ).any { clazz ->
+        am.getAppWidgetIds(android.content.ComponentName(context, clazz)).isNotEmpty()
+    }
+    if (!stillPlaced) {
+        WidgetRefreshScheduler.cancel(context)
+    }
 }
 
 class MonitorWidgetReceiver : GlanceAppWidgetReceiver() {
@@ -258,11 +509,11 @@ class MonitorWidgetReceiver : GlanceAppWidgetReceiver() {
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        WidgetRefreshWorker.enqueue(context)
+        enqueueRefresh(context)
     }
 
     override fun onDisabled(context: Context) {
-        WidgetRefreshScheduler.cancel(context)
+        cancelRefreshIfNoWidgets(context)
         super.onDisabled(context)
     }
 
@@ -273,7 +524,55 @@ class MonitorWidgetReceiver : GlanceAppWidgetReceiver() {
             android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE,
             android.appwidget.AppWidgetManager.ACTION_APPWIDGET_ENABLED,
             android.content.Intent.ACTION_BOOT_COMPLETED,
-            -> WidgetRefreshWorker.enqueue(context)
+            -> enqueueRefresh(context)
+        }
+    }
+}
+
+class MonitorWidgetCompactReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = MonitorGlanceWidgetCompact()
+
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        enqueueRefresh(context)
+    }
+
+    override fun onDisabled(context: Context) {
+        cancelRefreshIfNoWidgets(context)
+        super.onDisabled(context)
+    }
+
+    override fun onReceive(context: Context, intent: android.content.Intent) {
+        super.onReceive(context, intent)
+        when (intent.action) {
+            WidgetRefreshScheduler.ACTION_REFRESH,
+            android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE,
+            android.appwidget.AppWidgetManager.ACTION_APPWIDGET_ENABLED,
+            -> enqueueRefresh(context)
+        }
+    }
+}
+
+class MonitorWidgetWideReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = MonitorGlanceWidgetWide()
+
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        enqueueRefresh(context)
+    }
+
+    override fun onDisabled(context: Context) {
+        cancelRefreshIfNoWidgets(context)
+        super.onDisabled(context)
+    }
+
+    override fun onReceive(context: Context, intent: android.content.Intent) {
+        super.onReceive(context, intent)
+        when (intent.action) {
+            WidgetRefreshScheduler.ACTION_REFRESH,
+            android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE,
+            android.appwidget.AppWidgetManager.ACTION_APPWIDGET_ENABLED,
+            -> enqueueRefresh(context)
         }
     }
 }

@@ -23,19 +23,20 @@ object WidgetRefreshCoordinator {
         val appContext = context.applicationContext
         val store = WidgetStateStore(appContext)
         var connected = false
-        // Keep prior Ok/Error status during fetch — only push UI after success or failure.
+        var hostLabel = ""
 
         try {
             val config = SettingsRepository(appContext).settingsFlow.first().connection
+            hostLabel = if (config.host.isBlank()) "" else "${config.host}:${config.port}"
             if (config.host.isBlank()) {
                 store.saveError("未配置主机")
             } else {
                 val snapshot = fetcher.fetch(config)
-                store.saveSuccess(snapshot)
+                store.saveSuccess(snapshot, hostLabel = hostLabel)
                 connected = true
             }
         } catch (e: Exception) {
-            store.saveError(e.message ?: e.javaClass.simpleName)
+            store.saveError(e.message ?: e.javaClass.simpleName, hostLabel = hostLabel)
         }
 
         pushWidgetUi(appContext, store.current())

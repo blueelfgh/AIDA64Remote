@@ -8,9 +8,10 @@ import java.util.concurrent.TimeUnit
 
 object WidgetRefreshScheduler {
     const val ACTION_REFRESH = "com.example.aida64remote.action.WIDGET_REFRESH"
-    const val INTERVAL_OK_MS = 5_000L
-    const val INTERVAL_FAIL_MS = 300_000L
-    /** @deprecated use INTERVAL_OK_MS */
+    /** Background snapshot interval when last fetch succeeded. */
+    const val INTERVAL_OK_MS = 15 * 60_000L
+    /** Slower retry when disconnected; manual refresh / open-app still fetch immediately. */
+    const val INTERVAL_FAIL_MS = 30 * 60_000L
     const val INTERVAL_MS = INTERVAL_OK_MS
 
     private const val UNIQUE_WORK = "widget_refresh_chain"

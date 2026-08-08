@@ -30,9 +30,21 @@
         </activity>
 
         <receiver
+            android:name=".widget.MonitorWidgetCompactReceiver"
+            android:exported="true"
+            android:label="@string/widget_title_compact">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/monitor_widget_info_compact" />
+        </receiver>
+
+        <receiver
             android:name=".widget.MonitorWidgetReceiver"
             android:exported="true"
-            android:label="@string/widget_title">
+            android:label="@string/widget_title_standard">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.example.aida64remote.action.WIDGET_REFRESH" />
@@ -41,6 +53,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/monitor_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.MonitorWidgetWideReceiver"
+            android:exported="true"
+            android:label="@string/widget_title_wide">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/monitor_widget_info_wide" />
         </receiver>
     </application>
 
