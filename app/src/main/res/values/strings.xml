@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">AIDA64 Remote</string>
+    <string name="app_name">机况</string>
     <string name="settings_title">连接设置</string>
     <string name="host_label">主机 IP</string>
     <string name="port_label">端口</string>
