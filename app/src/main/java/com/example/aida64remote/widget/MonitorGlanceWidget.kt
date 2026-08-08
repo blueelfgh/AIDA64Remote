@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.Preferences
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
@@ -13,10 +14,12 @@ import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.LinearProgressIndicator
+import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.color.ColorProvider
+import androidx.glance.currentState
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
@@ -27,6 +30,8 @@ import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.width
+import androidx.glance.state.GlanceStateDefinition
+import androidx.glance.state.PreferencesGlanceStateDefinition
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
@@ -44,9 +49,16 @@ private val ColorRed = Color(0xFFFF5C5C)
 private val ColorTrack = Color(0xFF3A3A42)
 
 class MonitorGlanceWidget : GlanceAppWidget() {
+    override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
+
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val state = WidgetStateStore(context).current()
+        // Seed Glance prefs from DataStore once when a session starts.
+        val seed = WidgetStateStore(context).current()
         provideContent {
+            val prefs = currentState<Preferences>()
+            val state = WidgetGlancePrefs.run { prefs.toUiState() }
+                .takeUnless { it.status == WidgetConnStatus.Idle && it.updatedAtEpochMs == 0L }
+                ?: seed
             GlanceTheme {
                 WidgetContent(state = state, context = context)
             }
@@ -74,8 +86,7 @@ private fun WidgetContent(state: WidgetUiState, context: Context) {
             .fillMaxSize()
             .cornerRadius(20.dp)
             .background(ColorProvider(ColorBg, ColorBg))
-            .padding(14.dp)
-            .clickable(actionStartActivity<MainActivity>()),
+            .padding(14.dp),
     ) {
         Row(
             modifier = GlanceModifier.fillMaxWidth(),
@@ -88,6 +99,7 @@ private fun WidgetContent(state: WidgetUiState, context: Context) {
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                 ),
+                modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>()),
             )
             Spacer(modifier = GlanceModifier.defaultWeight())
             Text(
@@ -98,12 +110,40 @@ private fun WidgetContent(state: WidgetUiState, context: Context) {
                     fontWeight = FontWeight.Bold,
                 ),
             )
+            Spacer(modifier = GlanceModifier.width(10.dp))
+            Text(
+                text = context.getString(R.string.widget_refresh),
+                style = TextStyle(
+                    color = ColorProvider(ColorText, ColorText),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                modifier = GlanceModifier
+                    .cornerRadius(8.dp)
+                    .background(ColorProvider(ColorPanel, ColorPanel))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .clickable(actionRunCallback<WidgetRefreshAction>()),
+            )
         }
 
-        Spacer(modifier = GlanceModifier.height(12.dp))
+        if (state.updatedAtEpochMs > 0L) {
+            Spacer(modifier = GlanceModifier.height(4.dp))
+            Text(
+                text = context.getString(R.string.widget_updated_at, formatClock(state.updatedAtEpochMs)),
+                style = TextStyle(
+                    color = ColorProvider(ColorMuted, ColorMuted),
+                    fontSize = 11.sp,
+                ),
+            )
+        }
+
+        Spacer(modifier = GlanceModifier.height(8.dp))
 
         Row(
-            modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .defaultWeight()
+                .clickable(actionStartActivity<MainActivity>()),
             verticalAlignment = Alignment.Top,
         ) {
             MetricCard(
@@ -205,6 +245,14 @@ private fun formatTemp(raw: String): String {
     return if (raw.contains('°') || raw.contains('℃')) raw else "$raw℃"
 }
 
+private fun formatClock(epochMs: Long): String {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMs }
+    val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
+    val m = cal.get(java.util.Calendar.MINUTE)
+    val s = cal.get(java.util.Calendar.SECOND)
+    return "%02d:%02d:%02d".format(h, m, s)
+}
+
 class MonitorWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = MonitorGlanceWidget()
 
@@ -223,6 +271,7 @@ class MonitorWidgetReceiver : GlanceAppWidgetReceiver() {
         when (intent.action) {
             WidgetRefreshScheduler.ACTION_REFRESH,
             android.appwidget.AppWidgetManager.ACTION_APPWIDGET_UPDATE,
+            android.appwidget.AppWidgetManager.ACTION_APPWIDGET_ENABLED,
             android.content.Intent.ACTION_BOOT_COMPLETED,
             -> WidgetRefreshWorker.enqueue(context)
         }

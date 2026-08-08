@@ -7,6 +7,8 @@
     <string name="widget_status_error">连接失败</string>
     <string name="widget_status_updating">更新中</string>
     <string name="widget_status_idle">未连接</string>
+    <string name="widget_refresh">刷新</string>
+    <string name="widget_updated_at">更新 %1$s</string>
     <string name="widget_cpu_line">CPU %1$s · %2$s</string>
     <string name="widget_gpu_line">GPU %1$s · %2$s</string>
     <string name="settings_title">连接设置</string>

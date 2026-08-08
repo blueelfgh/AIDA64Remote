@@ -26,6 +26,7 @@ import com.example.aida64remote.ui.MonitorScreen
 import com.example.aida64remote.ui.SensorViewModel
 import com.example.aida64remote.ui.SettingsScreen
 import com.example.aida64remote.ui.theme.AIDA64RemoteTheme
+import com.example.aida64remote.widget.WidgetRefreshWorker
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,6 +43,11 @@ class MainActivity : ComponentActivity() {
                 Aida64App(viewModel = viewModel)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        WidgetRefreshWorker.enqueue(this)
     }
 
     @Composable
