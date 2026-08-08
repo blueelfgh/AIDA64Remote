@@ -1,5 +1,14 @@
 <resources>
     <string name="app_name">机况</string>
+    <string name="widget_title">机况</string>
+    <string name="widget_description">显示 CPU/GPU 温度与占用</string>
+    <string name="widget_loading">更新中…</string>
+    <string name="widget_status_ok">已连接</string>
+    <string name="widget_status_error">连接失败</string>
+    <string name="widget_status_updating">更新中</string>
+    <string name="widget_status_idle">未连接</string>
+    <string name="widget_cpu_line">CPU %1$s · %2$s</string>
+    <string name="widget_gpu_line">GPU %1$s · %2$s</string>
     <string name="settings_title">连接设置</string>
     <string name="host_label">主机 IP</string>
     <string name="port_label">端口</string>
