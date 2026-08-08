@@ -15,6 +15,7 @@ data class DashboardColors(
     val text: Color,
     val muted: Color,
     val accentYellow: Color,
+    val accentGreen: Color,
     val accentRed: Color,
     val hex: Color,
     val hexGlow: Color,
@@ -32,6 +33,7 @@ val DarkDashboardColors = DashboardColors(
     text = Color(0xFFF2F2F2),
     muted = Color(0xFFB8B8BE),
     accentYellow = Color(0xFFFFE14D),
+    accentGreen = Color(0xFF4CD964),
     accentRed = Color(0xFFFF4D4D),
     hex = Color(0xFF2A2A30),
     hexGlow = Color(0x66C41A00),
@@ -49,6 +51,7 @@ val LightDashboardColors = DashboardColors(
     text = Color(0xFF1A1F2C),
     muted = Color(0xFF5C667A),
     accentYellow = Color(0xFFC48A00),
+    accentGreen = Color(0xFF2E7D32),
     accentRed = Color(0xFFD32F2F),
     hex = Color(0xFFCDD5E2),
     hexGlow = Color(0x66A0AEC0),
@@ -72,6 +75,7 @@ val DashFill get() = DarkDashboardColors.fill
 val DashText get() = DarkDashboardColors.text
 val DashMuted get() = DarkDashboardColors.muted
 val DashAccentYellow get() = DarkDashboardColors.accentYellow
+val DashAccentGreen get() = DarkDashboardColors.accentGreen
 val DashAccentRed get() = DarkDashboardColors.accentRed
 val DashHex get() = DarkDashboardColors.hex
 val DashHexGlow get() = DarkDashboardColors.hexGlow

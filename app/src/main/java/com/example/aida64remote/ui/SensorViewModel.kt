@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.aida64remote.data.Aida64SseClient
 import com.example.aida64remote.data.AppSettings
 import com.example.aida64remote.data.ConnectionConfig
+import com.example.aida64remote.data.LhmHttpClient
 import com.example.aida64remote.data.SensorParser
+import com.example.aida64remote.data.ServiceType
 import com.example.aida64remote.data.SettingsRepository
 import com.example.aida64remote.data.ThemeMode
 import com.example.aida64remote.model.ConnectionEvent
@@ -34,25 +36,29 @@ data class MonitorUiState(
 
 class SensorViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsRepository = SettingsRepository(application)
-    private val client = Aida64SseClient()
+    private val aidaClient = Aida64SseClient()
+    private val lhmClient = LhmHttpClient()
 
     val appSettings: StateFlow<AppSettings> = settingsRepository.settingsFlow
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = AppSettings(),
+            started = SharingStarted.Eagerly,
+            initialValue = AppSettings(host = ""),
         )
 
     val savedConfig: StateFlow<ConnectionConfig> = appSettings
         .map { it.connection }
         .stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = ConnectionConfig(),
+            started = SharingStarted.Eagerly,
+            initialValue = ConnectionConfig(host = ""),
         )
 
     private val _uiState = MutableStateFlow(MonitorUiState())
     val uiState: StateFlow<MonitorUiState> = _uiState.asStateFlow()
+
+    private val _settingsLoaded = MutableStateFlow(false)
+    val settingsLoaded: StateFlow<Boolean> = _settingsLoaded.asStateFlow()
 
     private var connectionJob: Job? = null
     private val fpsHistory = ArrayDeque<Float>(HISTORY_SIZE)
@@ -67,28 +73,35 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
                         keepScreenOn = settings.keepScreenOn,
                     )
                 }
+                _settingsLoaded.value = true
             }
         }
     }
 
-    fun saveAndConnect(host: String, port: Int) {
-        val config = ConnectionConfig(host = host.trim(), port = port)
+    fun saveAndConnect(host: String, port: Int, serviceType: ServiceType) {
+        val config = ConnectionConfig(
+            host = host.trim(),
+            port = port,
+            serviceType = serviceType,
+        )
         viewModelScope.launch {
             settingsRepository.saveConnection(config)
             connect(config)
         }
     }
 
-    fun setKeepScreenOn(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.setKeepScreenOn(enabled) }
+    fun setServiceType(type: ServiceType) {
+        val current = _uiState.value.config
+        val shouldResetPort =
+            current.port == ServiceType.Aida64.defaultPort ||
+                current.port == ServiceType.LibreHardwareMonitor.defaultPort
+        viewModelScope.launch {
+            settingsRepository.setServiceType(type, alsoUpdateDefaultPort = shouldResetPort)
+        }
     }
 
-    fun setFollowSystemTheme(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.setThemeMode(
-                if (enabled) ThemeMode.System else ThemeMode.Dark,
-            )
-        }
+    fun setKeepScreenOn(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setKeepScreenOn(enabled) }
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -115,52 +128,75 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
                 config = config,
             )
         }
+        val source = when (config.serviceType) {
+            ServiceType.Aida64 -> aidaClient.connect(config)
+            ServiceType.LibreHardwareMonitor -> lhmClient.connect(config)
+        }
         connectionJob = viewModelScope.launch {
-            client.connect(config).collect { event ->
-                when (event) {
-                    ConnectionEvent.Connecting -> {
-                        _uiState.update {
-                            it.copy(status = ConnectionStatus.Connecting, errorMessage = null)
-                        }
-                    }
-                    ConnectionEvent.Connected -> {
-                        _uiState.update {
-                            it.copy(status = ConnectionStatus.Connected, errorMessage = null)
-                        }
-                    }
-                    is ConnectionEvent.SensorsUpdated -> {
-                        val values = SensorParser.toMap(event.sensors)
-                        pushHistory(fpsHistory, values["Gph24p"] ?: values["SIV23"])
-                        pushHistory(gpuHistory, values["Gph25p"] ?: values["SIV10"])
-                        val dashboard = values.toDashboard(
-                            labels = event.labels,
+            source.collect { event -> handleEvent(event) }
+        }
+    }
+
+    private fun handleEvent(event: ConnectionEvent) {
+        when (event) {
+            ConnectionEvent.Connecting -> {
+                _uiState.update {
+                    it.copy(status = ConnectionStatus.Connecting, errorMessage = null)
+                }
+            }
+            ConnectionEvent.Connected -> {
+                _uiState.update {
+                    it.copy(status = ConnectionStatus.Connected, errorMessage = null)
+                }
+            }
+            is ConnectionEvent.SensorsUpdated -> {
+                val values = SensorParser.toMap(event.sensors)
+                pushHistory(fpsHistory, values["Gph24p"] ?: values["SIV23"])
+                pushHistory(gpuHistory, values["Gph25p"] ?: values["SIV10"])
+                val dashboard = values.toDashboard(
+                    labels = event.labels,
+                    fpsHistory = fpsHistory.toList(),
+                    gpuHistory = gpuHistory.toList(),
+                )
+                _uiState.update {
+                    it.copy(
+                        status = ConnectionStatus.Connected,
+                        dashboard = dashboard,
+                        errorMessage = null,
+                    )
+                }
+            }
+            is ConnectionEvent.DashboardUpdated -> {
+                val usage = event.dashboard.gpuUsage.toFloatOrNull()
+                if (usage != null) {
+                    if (gpuHistory.size >= HISTORY_SIZE) gpuHistory.removeFirst()
+                    gpuHistory.addLast(usage.coerceAtLeast(0f))
+                }
+                _uiState.update {
+                    it.copy(
+                        status = ConnectionStatus.Connected,
+                        dashboard = event.dashboard.copy(
                             fpsHistory = fpsHistory.toList(),
                             gpuHistory = gpuHistory.toList(),
-                        )
-                        _uiState.update {
-                            it.copy(
-                                status = ConnectionStatus.Connected,
-                                dashboard = dashboard,
-                                errorMessage = null,
-                            )
-                        }
-                    }
-                    is ConnectionEvent.Reconnecting -> {
-                        _uiState.update {
-                            it.copy(
-                                status = ConnectionStatus.Reconnecting,
-                                errorMessage = event.message,
-                            )
-                        }
-                    }
-                    is ConnectionEvent.Disconnected -> {
-                        _uiState.update {
-                            it.copy(
-                                status = ConnectionStatus.Error,
-                                errorMessage = event.message,
-                            )
-                        }
-                    }
+                        ),
+                        errorMessage = null,
+                    )
+                }
+            }
+            is ConnectionEvent.Reconnecting -> {
+                _uiState.update {
+                    it.copy(
+                        status = ConnectionStatus.Reconnecting,
+                        errorMessage = event.message,
+                    )
+                }
+            }
+            is ConnectionEvent.Disconnected -> {
+                _uiState.update {
+                    it.copy(
+                        status = ConnectionStatus.Error,
+                        errorMessage = event.message,
+                    )
                 }
             }
         }

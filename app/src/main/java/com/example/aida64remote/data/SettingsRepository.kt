@@ -16,14 +16,19 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class SettingsRepository(private val context: Context) {
     private val hostKey = stringPreferencesKey("host")
     private val portKey = intPreferencesKey("port")
+    private val serviceTypeKey = stringPreferencesKey("service_type")
     private val keepScreenOnKey = booleanPreferencesKey("keep_screen_on")
     private val themeModeKey = stringPreferencesKey("theme_mode")
     private val followSystemThemeKey = booleanPreferencesKey("follow_system_theme")
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
+        val serviceType = prefs[serviceTypeKey]
+            ?.let { runCatching { ServiceType.valueOf(it) }.getOrNull() }
+            ?: ServiceType.Aida64
         AppSettings(
             host = prefs[hostKey] ?: ConnectionConfig.DEFAULT_HOST,
-            port = prefs[portKey] ?: ConnectionConfig.DEFAULT_PORT,
+            port = prefs[portKey] ?: serviceType.defaultPort,
+            serviceType = serviceType,
             keepScreenOn = prefs[keepScreenOnKey] ?: false,
             themeMode = prefs[themeModeKey]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() }
                 ?: if (prefs[followSystemThemeKey] == true) ThemeMode.System else ThemeMode.Dark,
@@ -34,6 +39,16 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs[hostKey] = config.host
             prefs[portKey] = config.port
+            prefs[serviceTypeKey] = config.serviceType.name
+        }
+    }
+
+    suspend fun setServiceType(type: ServiceType, alsoUpdateDefaultPort: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[serviceTypeKey] = type.name
+            if (alsoUpdateDefaultPort) {
+                prefs[portKey] = type.defaultPort
+            }
         }
     }
 

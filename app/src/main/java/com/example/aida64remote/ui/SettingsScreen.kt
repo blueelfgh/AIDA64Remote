@@ -22,6 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,6 +33,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.aida64remote.R
+import com.example.aida64remote.data.ServiceType
 import com.example.aida64remote.data.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,18 +41,28 @@ import com.example.aida64remote.data.ThemeMode
 fun SettingsScreen(
     initialHost: String,
     initialPort: Int,
+    serviceType: ServiceType,
     keepScreenOn: Boolean,
     themeMode: ThemeMode,
     canCancel: Boolean,
+    onServiceTypeChange: (ServiceType) -> Unit,
     onKeepScreenOnChange: (Boolean) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
-    onConnect: (host: String, port: Int) -> Unit,
+    onConnect: (host: String, port: Int, serviceType: ServiceType) -> Unit,
     onCancel: () -> Unit,
 ) {
     var host by remember(initialHost) { mutableStateOf(initialHost) }
     var portText by remember(initialPort) { mutableStateOf(initialPort.toString()) }
+    var selectedType by remember(serviceType) { mutableStateOf(serviceType) }
     var hostError by remember { mutableStateOf<String?>(null) }
     var portError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(initialPort) {
+        portText = initialPort.toString()
+    }
+    LaunchedEffect(serviceType) {
+        selectedType = serviceType
+    }
 
     val invalidHost = stringResource(R.string.invalid_host)
     val invalidPort = stringResource(R.string.invalid_port)
@@ -73,7 +85,40 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(modifier = Modifier.height(4.dp))
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.service_type_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.service_type_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = selectedType == ServiceType.Aida64,
+                        onClick = {
+                            selectedType = ServiceType.Aida64
+                            onServiceTypeChange(ServiceType.Aida64)
+                        },
+                        label = { Text(stringResource(R.string.service_type_aida64)) },
+                    )
+                    FilterChip(
+                        selected = selectedType == ServiceType.LibreHardwareMonitor,
+                        onClick = {
+                            selectedType = ServiceType.LibreHardwareMonitor
+                            onServiceTypeChange(ServiceType.LibreHardwareMonitor)
+                        },
+                        label = { Text(stringResource(R.string.service_type_lhm)) },
+                    )
+                }
+            }
+
             OutlinedTextField(
                 value = host,
                 onValueChange = {
@@ -154,7 +199,7 @@ fun SettingsScreen(
                         ok = false
                     }
                     if (ok && port != null) {
-                        onConnect(trimmedHost, port)
+                        onConnect(trimmedHost, port, selectedType)
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

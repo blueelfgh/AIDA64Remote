@@ -20,6 +20,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.aida64remote.data.ConnectionConfig
 import com.example.aida64remote.model.ConnectionStatus
 import com.example.aida64remote.ui.MonitorScreen
 import com.example.aida64remote.ui.SensorViewModel
@@ -81,13 +82,12 @@ private fun Aida64App(viewModel: SensorViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val savedConfig by viewModel.savedConfig.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
+    val settingsLoaded by viewModel.settingsLoaded.collectAsStateWithLifecycle()
     var autoConnected by remember { mutableStateOf(false) }
 
-    LaunchedEffect(savedConfig) {
-        if (!autoConnected &&
-            uiState.status == ConnectionStatus.Idle &&
-            savedConfig.host.isNotBlank()
-        ) {
+    LaunchedEffect(settingsLoaded, savedConfig) {
+        if (!settingsLoaded || autoConnected) return@LaunchedEffect
+        if (uiState.status == ConnectionStatus.Idle && savedConfig.host.isNotBlank()) {
             autoConnected = true
             viewModel.connect(savedConfig)
             navController.navigate("monitor") {
@@ -100,16 +100,22 @@ private fun Aida64App(viewModel: SensorViewModel) {
         composable("settings") {
             val canCancel = navController.previousBackStackEntry != null
             SettingsScreen(
-                initialHost = savedConfig.host,
-                initialPort = savedConfig.port,
+                initialHost = savedConfig.host.ifBlank { ConnectionConfig.DEFAULT_HOST },
+                initialPort = if (savedConfig.host.isBlank()) {
+                    appSettings.serviceType.defaultPort
+                } else {
+                    savedConfig.port
+                },
+                serviceType = appSettings.serviceType,
                 keepScreenOn = appSettings.keepScreenOn,
                 themeMode = appSettings.themeMode,
                 canCancel = canCancel,
+                onServiceTypeChange = viewModel::setServiceType,
                 onKeepScreenOnChange = viewModel::setKeepScreenOn,
                 onThemeModeChange = viewModel::setThemeMode,
-                onConnect = { host, port ->
+                onConnect = { host, port, serviceType ->
                     autoConnected = true
-                    viewModel.saveAndConnect(host, port)
+                    viewModel.saveAndConnect(host, port, serviceType)
                     navController.navigate("monitor") {
                         popUpTo("settings") { inclusive = true }
                     }
@@ -126,7 +132,7 @@ private fun Aida64App(viewModel: SensorViewModel) {
                         popUpTo("monitor") { inclusive = true }
                     }
                 },
-                onRetry = { viewModel.connect() },
+                onRetry = { viewModel.connect(uiState.config) },
                 onOpenSettings = {
                     navController.navigate("settings")
                 },

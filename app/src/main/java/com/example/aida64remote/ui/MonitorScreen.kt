@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aida64remote.R
@@ -98,8 +99,7 @@ fun MonitorScreen(
             }
             state.status == ConnectionStatus.Connecting ||
                 (state.status == ConnectionStatus.Connected &&
-                    state.dashboard.cpuTemp == "—" &&
-                    state.dashboard.cpuClock == "—") -> {
+                    !state.dashboard.hasRenderableSensorData()) -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(color = DashColors.accentYellow)
@@ -130,6 +130,17 @@ fun MonitorScreen(
             }
         }
     }
+}
+
+/** True when at least one primary metric is present (not the placeholder dash). */
+private fun com.example.aida64remote.model.DashboardSnapshot.hasRenderableSensorData(): Boolean {
+    fun present(value: String): Boolean = value.isNotBlank() && value != "—"
+    return present(cpuTemp) ||
+        present(cpuClock) ||
+        present(cpuUsage) ||
+        present(gpuTemp) ||
+        present(gpuUsage) ||
+        present(ramUsage)
 }
 
 @Composable
@@ -215,11 +226,14 @@ private fun TopActions(
         Text(
             text = statusLabel(state.status),
             color = when (state.status) {
-                ConnectionStatus.Connected -> DashColors.accentYellow
+                ConnectionStatus.Connected -> DashColors.accentGreen
                 ConnectionStatus.Error -> DashColors.accentRed
-                else -> DashColors.muted
+                ConnectionStatus.Connecting,
+                ConnectionStatus.Reconnecting,
+                ConnectionStatus.Idle -> DashColors.accentYellow
             },
-            fontSize = 12.sp,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
         )
         Spacer(modifier = Modifier.weight(1f))
         TextButton(onClick = onDisconnect) {

@@ -8,7 +8,11 @@
     <string name="disconnect">断开</string>
     <string name="settings">设置</string>
     <string name="monitor_title">传感器</string>
-    <string name="settings_hint">请在 PC 端 AIDA64 启用 RemoteSensor（LCD），并确保与手机在同一局域网。</string>
+    <string name="settings_hint">选择数据源并填写 PC 局域网 IP/端口。AIDA64 需启用 RemoteSensor；LibreHardwareMonitor 需运行 PC 托盘服务。</string>
+    <string name="service_type_title">服务类型</string>
+    <string name="service_type_hint">可在 AIDA64 RemoteSensor 与 LibreHardwareMonitor 服务间切换</string>
+    <string name="service_type_aida64">AIDA64</string>
+    <string name="service_type_lhm">LibreHardwareMonitor</string>
     <string name="status_idle">未连接</string>
     <string name="status_connecting">连接中…</string>
     <string name="status_connected">已连接</string>

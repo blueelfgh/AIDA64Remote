@@ -23,6 +23,7 @@ sealed interface ConnectionEvent {
         val sensors: List<SensorItem>,
         val labels: Map<String, String> = emptyMap(),
     ) : ConnectionEvent
+    data class DashboardUpdated(val dashboard: DashboardSnapshot) : ConnectionEvent
     data class Reconnecting(val attempt: Int, val message: String?) : ConnectionEvent
     data class Disconnected(val message: String?) : ConnectionEvent
 }
