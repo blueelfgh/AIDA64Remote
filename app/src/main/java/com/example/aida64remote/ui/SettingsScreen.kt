@@ -48,6 +48,7 @@ fun SettingsScreen(
     onServiceTypeChange: (ServiceType) -> Unit,
     onKeepScreenOnChange: (Boolean) -> Unit,
     onThemeModeChange: (ThemeMode) -> Unit,
+    onClearBarPeaks: () -> Unit,
     onConnect: (host: String, port: Int, serviceType: ServiceType) -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -181,6 +182,24 @@ fun SettingsScreen(
                         onClick = { onThemeModeChange(ThemeMode.System) },
                         label = { Text(stringResource(R.string.theme_system)) },
                     )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = stringResource(R.string.clear_bar_peaks),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = stringResource(R.string.clear_bar_peaks_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    onClick = onClearBarPeaks,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.clear_bar_peaks))
                 }
             }
 

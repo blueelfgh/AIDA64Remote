@@ -5,12 +5,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.aida64remote.data.Aida64SseClient
 import com.example.aida64remote.data.AppSettings
+import com.example.aida64remote.data.BarScalePeaks
 import com.example.aida64remote.data.ConnectionConfig
 import com.example.aida64remote.data.LhmHttpClient
 import com.example.aida64remote.data.SensorParser
 import com.example.aida64remote.data.ServiceType
 import com.example.aida64remote.data.SettingsRepository
 import com.example.aida64remote.data.ThemeMode
+import com.example.aida64remote.data.parseSensorNumber
 import com.example.aida64remote.model.ConnectionEvent
 import com.example.aida64remote.model.ConnectionStatus
 import com.example.aida64remote.model.DashboardSnapshot
@@ -20,10 +22,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+data class MetricStats(
+    val min: Float? = null,
+    val max: Float? = null,
+    val avg: Float? = null,
+)
 
 data class MonitorUiState(
     val status: ConnectionStatus = ConnectionStatus.Idle,
@@ -32,6 +41,10 @@ data class MonitorUiState(
     val config: ConnectionConfig = ConnectionConfig(),
     val keepScreenOn: Boolean = false,
     val isFullscreen: Boolean = false,
+    val cpuTempStats: MetricStats = MetricStats(),
+    val gpuTempStats: MetricStats = MetricStats(),
+    val fpsStats: MetricStats = MetricStats(),
+    val barPeaks: BarScalePeaks = BarScalePeaks(),
 )
 
 class SensorViewModel(application: Application) : AndroidViewModel(application) {
@@ -64,6 +77,12 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
     private val fpsHistory = ArrayDeque<Float>(HISTORY_SIZE)
     private val gpuHistory = ArrayDeque<Float>(HISTORY_SIZE)
 
+    private val cpuTempAccumulator = MetricAccumulator()
+    private val gpuTempAccumulator = MetricAccumulator()
+    private val fpsAccumulator = MetricAccumulator()
+    private var barPeaks = BarScalePeaks()
+    private var persistPeaksJob: Job? = null
+
     init {
         viewModelScope.launch {
             settingsRepository.settingsFlow.collect { settings ->
@@ -75,6 +94,11 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 _settingsLoaded.value = true
             }
+        }
+        viewModelScope.launch {
+            val peaks = settingsRepository.barScalePeaksFlow.first()
+            barPeaks = peaks
+            _uiState.update { it.copy(barPeaks = peaks) }
         }
     }
 
@@ -108,6 +132,14 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { settingsRepository.setThemeMode(mode) }
     }
 
+    fun clearBarScalePeaks() {
+        viewModelScope.launch {
+            settingsRepository.clearBarScalePeaks()
+            barPeaks = BarScalePeaks()
+            _uiState.update { it.copy(barPeaks = BarScalePeaks()) }
+        }
+    }
+
     fun toggleFullscreen() {
         _uiState.update { it.copy(isFullscreen = !it.isFullscreen) }
     }
@@ -116,10 +148,24 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.update { it.copy(isFullscreen = enabled) }
     }
 
+    fun resetMetricStats() {
+        cpuTempAccumulator.reset()
+        gpuTempAccumulator.reset()
+        fpsAccumulator.reset()
+        _uiState.update {
+            it.copy(
+                cpuTempStats = MetricStats(),
+                gpuTempStats = MetricStats(),
+                fpsStats = MetricStats(),
+            )
+        }
+    }
+
     fun connect(config: ConnectionConfig = _uiState.value.config) {
         connectionJob?.cancel()
         fpsHistory.clear()
         gpuHistory.clear()
+        resetMetricStats()
         _uiState.update {
             it.copy(
                 status = ConnectionStatus.Connecting,
@@ -158,11 +204,17 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
                     fpsHistory = fpsHistory.toList(),
                     gpuHistory = gpuHistory.toList(),
                 )
+                recordDashboardMetrics(dashboard)
+                val peaks = absorbBarPeaks(dashboard)
                 _uiState.update {
                     it.copy(
                         status = ConnectionStatus.Connected,
                         dashboard = dashboard,
                         errorMessage = null,
+                        cpuTempStats = cpuTempAccumulator.toStats(),
+                        gpuTempStats = gpuTempAccumulator.toStats(),
+                        fpsStats = fpsAccumulator.toStats(),
+                        barPeaks = peaks,
                     )
                 }
             }
@@ -172,14 +224,21 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
                     if (gpuHistory.size >= HISTORY_SIZE) gpuHistory.removeFirst()
                     gpuHistory.addLast(usage.coerceAtLeast(0f))
                 }
+                val dashboard = event.dashboard.copy(
+                    fpsHistory = fpsHistory.toList(),
+                    gpuHistory = gpuHistory.toList(),
+                )
+                recordDashboardMetrics(dashboard)
+                val peaks = absorbBarPeaks(dashboard)
                 _uiState.update {
                     it.copy(
                         status = ConnectionStatus.Connected,
-                        dashboard = event.dashboard.copy(
-                            fpsHistory = fpsHistory.toList(),
-                            gpuHistory = gpuHistory.toList(),
-                        ),
+                        dashboard = dashboard,
                         errorMessage = null,
+                        cpuTempStats = cpuTempAccumulator.toStats(),
+                        gpuTempStats = gpuTempAccumulator.toStats(),
+                        fpsStats = fpsAccumulator.toStats(),
+                        barPeaks = peaks,
                     )
                 }
             }
@@ -207,6 +266,7 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
         connectionJob = null
         fpsHistory.clear()
         gpuHistory.clear()
+        resetMetricStats()
         _uiState.update {
             it.copy(
                 status = ConnectionStatus.Idle,
@@ -222,6 +282,24 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
         super.onCleared()
     }
 
+    private fun absorbBarPeaks(dashboard: DashboardSnapshot): BarScalePeaks {
+        val (next, changed) = barPeaks.absorb(dashboard)
+        if (changed) {
+            barPeaks = next
+            persistPeaksJob?.cancel()
+            persistPeaksJob = viewModelScope.launch {
+                settingsRepository.saveBarScalePeaks(next)
+            }
+        }
+        return next
+    }
+
+    private fun recordDashboardMetrics(dashboard: DashboardSnapshot) {
+        parseSensorNumber(dashboard.cpuTemp)?.let { cpuTempAccumulator.record(it) }
+        parseSensorNumber(dashboard.gpuTemp)?.let { gpuTempAccumulator.record(it) }
+        parseSensorNumber(dashboard.fps)?.let { fpsAccumulator.record(it) }
+    }
+
     private fun pushHistory(history: ArrayDeque<Float>, raw: String?) {
         val value = raw?.toFloatOrNull() ?: return
         if (history.size >= HISTORY_SIZE) {
@@ -232,5 +310,35 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val HISTORY_SIZE = 48
+    }
+}
+
+private class MetricAccumulator {
+    private var min: Float? = null
+    private var max: Float? = null
+    private var sum = 0.0
+    private var count = 0
+
+    fun record(value: Float) {
+        min = min?.coerceAtMost(value) ?: value
+        max = max?.coerceAtLeast(value) ?: value
+        sum += value
+        count += 1
+    }
+
+    fun reset() {
+        min = null
+        max = null
+        sum = 0.0
+        count = 0
+    }
+
+    fun toStats(): MetricStats {
+        if (count == 0) return MetricStats()
+        return MetricStats(
+            min = min,
+            max = max,
+            avg = (sum / count).toFloat(),
+        )
     }
 }

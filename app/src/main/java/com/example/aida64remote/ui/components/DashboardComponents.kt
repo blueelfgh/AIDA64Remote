@@ -3,6 +3,7 @@ package com.example.aida64remote.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,9 +45,13 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.aida64remote.R
+import com.example.aida64remote.data.BarScalePeaks
+import com.example.aida64remote.data.parseSensorNumber
 import com.example.aida64remote.model.DashboardSnapshot
+import com.example.aida64remote.ui.MetricStats
 import com.example.aida64remote.ui.theme.DashColors
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable
@@ -113,7 +118,22 @@ fun MetricBarRow(
     progress: Float,
     labelSize: TextUnit = 13.sp,
     valueSize: TextUnit = 14.sp,
+    /** 历史出现过的最大数值；有则用作满刻度并重算进度 */
+    peakMax: Float? = null,
 ) {
+    val current = parseMetricNumber(value)
+    val resolvedProgress = if (peakMax != null && peakMax > 0f && current != null) {
+        (current / peakMax).coerceIn(0f, 1f)
+    } else {
+        progress
+    }
+    val resolvedMax = peakMax?.let { formatScaleMax(it) }
+    val valueText = when {
+        resolvedMax == null && unit.isEmpty() -> value
+        resolvedMax == null -> "$value $unit"
+        unit.isEmpty() -> stringResource(R.string.metric_value_with_max_no_unit, value, resolvedMax)
+        else -> stringResource(R.string.metric_value_with_max, value, resolvedMax, unit)
+    }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -130,14 +150,16 @@ fun MetricBarRow(
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = if (unit.isEmpty()) value else "$value $unit",
+                text = valueText,
                 color = DashColors.text,
                 fontSize = valueSize,
                 fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
-        ThinProgressBar(progress = progress)
+        ThinProgressBar(progress = resolvedProgress)
     }
 }
 
@@ -192,7 +214,7 @@ fun TempValue(
 ) {
     Text(
         text = temp,
-        color = DashColors.text,
+        color = temperatureColor(temp),
         fontSize = tempSize,
         fontWeight = FontWeight.Bold,
         modifier = modifier,
@@ -200,8 +222,32 @@ fun TempValue(
 }
 
 @Composable
+fun StatsCaption(
+    stats: MetricStats,
+    modifier: Modifier = Modifier,
+    decimals: Int = 0,
+) {
+    Text(
+        text = stringResource(
+            R.string.stats_caption,
+            formatStatValue(stats.max, decimals),
+            formatStatValue(stats.min, decimals),
+            formatStatValue(stats.avg, decimals),
+        ),
+        color = DashColors.muted,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier,
+    )
+}
+
+@Composable
 fun CpuPanel(
     data: DashboardSnapshot,
+    cpuTempStats: MetricStats = MetricStats(),
+    barPeaks: BarScalePeaks = BarScalePeaks(),
     modifier: Modifier = Modifier,
     showKeepScreenOn: Boolean = false,
 ) {
@@ -226,7 +272,14 @@ fun CpuPanel(
                     .padding(top = if (showKeepScreenOn) 22.dp else 0.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TempValue(temp = data.cpuTemp, tempSize = 36.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                ) {
+                    TempValue(temp = data.cpuTemp, tempSize = 36.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    StatsCaption(stats = cpuTempStats)
+                }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(
                     modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -245,6 +298,7 @@ fun CpuPanel(
                         value = data.cpuClock,
                         unit = stringResource(R.string.unit_mhz),
                         progress = data.cpuClockBar,
+                        peakMax = barPeaks.cpuClock,
                         labelSize = 14.sp,
                         valueSize = 16.sp,
                     )
@@ -253,6 +307,7 @@ fun CpuPanel(
                         value = data.cpuUsage,
                         unit = stringResource(R.string.unit_percent),
                         progress = data.cpuUsageBar,
+                        peakMax = barPeaks.cpuUsage,
                         labelSize = 14.sp,
                         valueSize = 16.sp,
                     )
@@ -263,32 +318,56 @@ fun CpuPanel(
 }
 
 @Composable
-fun GpuPanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
+fun GpuPanel(
+    data: DashboardSnapshot,
+    gpuTempStats: MetricStats = MetricStats(),
+    barPeaks: BarScalePeaks = BarScalePeaks(),
+    modifier: Modifier = Modifier,
+) {
     DashPanel(modifier = modifier) {
         Row(
             modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TempValue(
-                temp = data.gpuTemp,
-                tempSize = 30.sp,
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(horizontal = 6.dp),
-            )
+            ) {
+                TempValue(temp = data.gpuTemp, tempSize = 30.sp)
+                Spacer(modifier = Modifier.height(4.dp))
+                StatsCaption(stats = gpuTempStats)
+            }
             Spacer(modifier = Modifier.width(8.dp))
             Column(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 verticalArrangement = Arrangement.SpaceEvenly,
             ) {
-                MetricBarRow(stringResource(R.string.vram_used), data.vramUsed, stringResource(R.string.unit_mb), data.vramUsedBar, 12.sp, 13.sp)
-                MetricBarRow(stringResource(R.string.vram_free), data.vramFree, stringResource(R.string.unit_mb), data.vramFreeBar, 12.sp, 13.sp)
-                MetricBarRow(stringResource(R.string.gpu_clock), data.gpuClock, stringResource(R.string.unit_mhz), data.gpuClockBar, 12.sp, 13.sp)
-                MetricBarRow(stringResource(R.string.gpu_mem_clock), data.gpuMemClock, stringResource(R.string.unit_mhz), data.gpuMemClockBar, 12.sp, 13.sp)
-                MetricBarRow(stringResource(R.string.gpu_usage), data.gpuUsage, stringResource(R.string.unit_percent), data.gpuUsageBar, 12.sp, 13.sp)
+                MetricBarRow(
+                    stringResource(R.string.vram_used), data.vramUsed, stringResource(R.string.unit_mb),
+                    data.vramUsedBar, 12.sp, 13.sp, barPeaks.vramUsed,
+                )
+                MetricBarRow(
+                    stringResource(R.string.vram_free), data.vramFree, stringResource(R.string.unit_mb),
+                    data.vramFreeBar, 12.sp, 13.sp, barPeaks.vramFree,
+                )
+                MetricBarRow(
+                    stringResource(R.string.gpu_clock), data.gpuClock, stringResource(R.string.unit_mhz),
+                    data.gpuClockBar, 12.sp, 13.sp, barPeaks.gpuClock,
+                )
+                MetricBarRow(
+                    stringResource(R.string.gpu_mem_clock), data.gpuMemClock, stringResource(R.string.unit_mhz),
+                    data.gpuMemClockBar, 12.sp, 13.sp, barPeaks.gpuMemClock,
+                )
+                MetricBarRow(
+                    stringResource(R.string.gpu_usage), data.gpuUsage, stringResource(R.string.unit_percent),
+                    data.gpuUsageBar, 12.sp, 13.sp, barPeaks.gpuUsage,
+                )
                 MetricBarRow(
                     label = stringResource(R.string.gpu_temp),
                     value = data.gpuTemp.filter { it.isDigit() || it == '.' },
                     unit = stringResource(R.string.unit_celsius),
                     progress = data.gpuTempBar,
+                    peakMax = barPeaks.gpuTemp,
                     labelSize = 12.sp,
                     valueSize = 13.sp,
                 )
@@ -298,7 +377,11 @@ fun GpuPanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun FpsPanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
+fun FpsPanel(
+    data: DashboardSnapshot,
+    fpsStats: MetricStats = MetricStats(),
+    modifier: Modifier = Modifier,
+) {
     DashPanel(modifier = modifier) {
         Box(modifier = Modifier.fillMaxSize()) {
             Text(
@@ -313,18 +396,23 @@ fun FpsPanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
                 fontSize = 11.sp,
                 modifier = Modifier.align(Alignment.BottomStart),
             )
-            Text(
-                text = "${data.fps} FPS",
-                color = DashColors.text,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+            Column(
+                horizontalAlignment = Alignment.End,
                 modifier = Modifier.align(Alignment.TopEnd),
-            )
+            ) {
+                Text(
+                    text = "${data.fps} FPS",
+                    color = DashColors.text,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                StatsCaption(stats = fpsStats)
+            }
             Sparkline(
                 values = data.fpsHistory,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 22.dp, top = 18.dp, end = 8.dp, bottom = 8.dp),
+                    .padding(start = 22.dp, top = 28.dp, end = 8.dp, bottom = 8.dp),
                 maxY = 120f,
                 lineColor = DashColors.sparkline,
             )
@@ -333,7 +421,11 @@ fun FpsPanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun RamPanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
+fun RamPanel(
+    data: DashboardSnapshot,
+    barPeaks: BarScalePeaks = BarScalePeaks(),
+    modifier: Modifier = Modifier,
+) {
     DashPanel(modifier = modifier) {
         Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Column(
@@ -350,9 +442,18 @@ fun RamPanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
                         fontWeight = FontWeight.Bold,
                     )
                 }
-                MetricBarRow(stringResource(R.string.ram_used), data.ramUsed, "", data.ramUsedBar, 13.sp, 14.sp)
-                MetricBarRow(stringResource(R.string.ram_free), data.ramFree, "", data.ramFreeBar, 13.sp, 14.sp)
-                MetricBarRow(stringResource(R.string.ram_usage), data.ramUsage, "", data.ramUsageBar, 13.sp, 14.sp)
+                MetricBarRow(
+                    stringResource(R.string.ram_used), data.ramUsed, "", data.ramUsedBar,
+                    13.sp, 14.sp, barPeaks.ramUsed,
+                )
+                MetricBarRow(
+                    stringResource(R.string.ram_free), data.ramFree, "", data.ramFreeBar,
+                    13.sp, 14.sp, barPeaks.ramFree,
+                )
+                MetricBarRow(
+                    stringResource(R.string.ram_usage), data.ramUsage, "", data.ramUsageBar,
+                    13.sp, 14.sp, barPeaks.ramUsage,
+                )
             }
             Column(
                 modifier = Modifier.weight(0.65f).fillMaxHeight(),
@@ -366,84 +467,78 @@ fun RamPanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun StoragePanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
+fun StoragePanel(
+    data: DashboardSnapshot,
+    modifier: Modifier = Modifier,
+) {
     DashPanel(modifier = modifier) {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceEvenly,
         ) {
-            DriveRow(stringResource(R.string.drive_c), data.driveCUsage, data.driveCBar, data.driveCTemp)
-            DriveRow(stringResource(R.string.drive_d), data.driveDUsage, data.driveDBar, data.driveDTemp)
-            DriveRow(stringResource(R.string.drive_e), data.driveEUsage, data.driveEBar, data.driveETemp)
+            DriveTempRow(stringResource(R.string.drive_c), data.driveCTemp)
+            DriveTempRow(stringResource(R.string.drive_d), data.driveDTemp)
+            DriveTempRow(stringResource(R.string.drive_e), data.driveETemp)
         }
     }
 }
 
 @Composable
-private fun DriveRow(name: String, usage: String, bar: Float, temp: String) {
+private fun DriveTempRow(name: String, temp: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Outlined.Storage, null, tint = DashColors.text, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "$name: $usage%",
-                color = DashColors.text,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            ThinProgressBar(progress = bar)
-        }
-        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = name,
+            color = DashColors.text,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
         Text(
             text = stringResource(R.string.temp_prefix, temp),
-            color = DashColors.text,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
+            color = temperatureColor(temp),
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
 
 @Composable
-fun LogoTimePanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
+fun LogoTimePanel(
+    data: DashboardSnapshot,
+    modifier: Modifier = Modifier,
+    onResetStats: (() -> Unit)? = null,
+) {
     DashPanel(modifier = modifier) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val logoColor = DashColors.text
-                Canvas(modifier = Modifier.size(28.dp)) {
-                    val path = Path().apply {
-                        moveTo(size.width * 0.15f, size.height * 0.85f)
-                        lineTo(size.width * 0.5f, size.height * 0.15f)
-                        lineTo(size.width * 0.85f, size.height * 0.85f)
-                        close()
-                    }
-                    drawPath(path, logoColor, style = Stroke(width = 3f))
-                }
-                Spacer(modifier = Modifier.width(6.dp))
+            if (onResetStats != null) {
                 Text(
-                    text = stringResource(R.string.brand_name),
-                    color = DashColors.text,
-                    fontSize = 18.sp,
+                    text = stringResource(R.string.reset_stats),
+                    color = DashColors.accentYellow,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
+                    modifier = Modifier
+                        .clickable(onClick = onResetStats)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.CalendarMonth, null, tint = DashColors.text, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(data.date, color = DashColors.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Icon(Icons.Outlined.CalendarMonth, null, tint = DashColors.text, modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(data.date, color = DashColors.text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Schedule, null, tint = DashColors.text, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(data.time, color = DashColors.text, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Outlined.Schedule, null, tint = DashColors.text, modifier = Modifier.size(28.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(data.time, color = DashColors.text, fontSize = 36.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -452,6 +547,7 @@ fun LogoTimePanel(data: DashboardSnapshot, modifier: Modifier = Modifier) {
 @Composable
 fun NetFanPanel(
     data: DashboardSnapshot,
+    barPeaks: BarScalePeaks = BarScalePeaks(),
     modifier: Modifier = Modifier,
     isFullscreen: Boolean = false,
     onToggleFullscreen: (() -> Unit)? = null,
@@ -485,7 +581,13 @@ fun NetFanPanel(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Speaker, null, tint = DashColors.text, modifier = Modifier.size(22.dp))
                     Spacer(modifier = Modifier.width(10.dp))
-                    ThinProgressBar(progress = data.volumeBar, modifier = Modifier.weight(1f))
+                    val volumePeak = barPeaks.volume
+                    val volumeProgress = if (volumePeak != null && volumePeak > 0f) {
+                        ((data.volumeBar * 100f) / volumePeak).coerceIn(0f, 1f)
+                    } else {
+                        data.volumeBar
+                    }
+                    ThinProgressBar(progress = volumeProgress, modifier = Modifier.weight(1f))
                 }
                 FanRow("CPU/FAN", data.cpuFan, DashColors.accentYellow)
                 FanRow(
@@ -531,6 +633,41 @@ private fun FanRow(label: String, value: String, color: Color) {
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
         )
+    }
+}
+
+@Composable
+private fun temperatureColor(temp: String): Color {
+    val value = parseSensorNumber(temp) ?: return DashColors.text
+    return when {
+        value > 85f -> DashColors.accentRed
+        value > 75f -> DashColors.accentYellow
+        else -> DashColors.text
+    }
+}
+
+@Composable
+private fun formatStatValue(value: Float?, decimals: Int): String {
+    if (value == null) return stringResource(R.string.stats_placeholder)
+    return if (decimals <= 0) {
+        value.roundToInt().toString()
+    } else {
+        "%.${decimals}f".format(value)
+    }
+}
+
+private fun parseMetricNumber(raw: String): Float? = parseSensorNumber(raw)
+
+private fun formatScaleMax(max: Float): String {
+    val rounded = when {
+        max >= 100f -> max.roundToInt().toFloat()
+        max >= 10f -> (max * 10f).roundToInt() / 10f
+        else -> (max * 100f).roundToInt() / 100f
+    }
+    return if (rounded == rounded.toInt().toFloat()) {
+        rounded.toInt().toString()
+    } else {
+        rounded.toString()
     }
 }
 

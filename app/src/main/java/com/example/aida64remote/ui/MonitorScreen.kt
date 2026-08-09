@@ -59,6 +59,7 @@ fun MonitorScreen(
     onOpenSettings: () -> Unit,
     onToggleFullscreen: () -> Unit,
     onExitFullscreen: () -> Unit,
+    onResetStats: () -> Unit,
 ) {
     val context = LocalContext.current
     val exitHint = stringResource(R.string.press_again_to_exit)
@@ -126,6 +127,7 @@ fun MonitorScreen(
                     onDisconnect = onDisconnect,
                     onOpenSettings = onOpenSettings,
                     onToggleFullscreen = onToggleFullscreen,
+                    onResetStats = onResetStats,
                 )
             }
         }
@@ -149,6 +151,7 @@ private fun DashboardGrid(
     onDisconnect: () -> Unit,
     onOpenSettings: () -> Unit,
     onToggleFullscreen: () -> Unit,
+    onResetStats: () -> Unit,
 ) {
     val data = state.dashboard
     Column(
@@ -170,11 +173,15 @@ private fun DashboardGrid(
         ) {
             CpuPanel(
                 data = data,
+                cpuTempStats = state.cpuTempStats,
+                barPeaks = state.barPeaks,
                 showKeepScreenOn = state.keepScreenOn,
                 modifier = Modifier.weight(LeftColWeight).fillMaxSize(),
             )
             GpuPanel(
                 data = data,
+                gpuTempStats = state.gpuTempStats,
+                barPeaks = state.barPeaks,
                 modifier = Modifier.weight(RightColWeight).fillMaxSize(),
             )
         }
@@ -187,10 +194,12 @@ private fun DashboardGrid(
         ) {
             FpsPanel(
                 data = data,
+                fpsStats = state.fpsStats,
                 modifier = Modifier.weight(LeftColWeight).fillMaxSize(),
             )
             RamPanel(
                 data = data,
+                barPeaks = state.barPeaks,
                 modifier = Modifier.weight(RightColWeight).fillMaxSize(),
             )
         }
@@ -201,10 +210,18 @@ private fun DashboardGrid(
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            StoragePanel(data = data, modifier = Modifier.weight(1.2f).fillMaxSize())
-            LogoTimePanel(data = data, modifier = Modifier.weight(0.85f).fillMaxSize())
+            StoragePanel(
+                data = data,
+                modifier = Modifier.weight(1.2f).fillMaxSize(),
+            )
+            LogoTimePanel(
+                data = data,
+                onResetStats = onResetStats,
+                modifier = Modifier.weight(0.85f).fillMaxSize(),
+            )
             NetFanPanel(
                 data = data,
+                barPeaks = state.barPeaks,
                 isFullscreen = state.isFullscreen,
                 onToggleFullscreen = onToggleFullscreen,
                 modifier = Modifier.weight(1f).fillMaxSize(),

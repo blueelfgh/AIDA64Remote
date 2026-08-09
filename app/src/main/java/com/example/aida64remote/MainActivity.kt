@@ -119,6 +119,7 @@ private fun Aida64App(viewModel: SensorViewModel) {
                 onServiceTypeChange = viewModel::setServiceType,
                 onKeepScreenOnChange = viewModel::setKeepScreenOn,
                 onThemeModeChange = viewModel::setThemeMode,
+                onClearBarPeaks = viewModel::clearBarScalePeaks,
                 onConnect = { host, port, serviceType ->
                     autoConnected = true
                     viewModel.saveAndConnect(host, port, serviceType)
@@ -144,6 +145,7 @@ private fun Aida64App(viewModel: SensorViewModel) {
                 },
                 onToggleFullscreen = viewModel::toggleFullscreen,
                 onExitFullscreen = { viewModel.setFullscreen(false) },
+                onResetStats = viewModel::resetMetricStats,
             )
         }
     }
