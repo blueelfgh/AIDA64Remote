@@ -168,12 +168,12 @@ fun Sparkline(
     val resolvedLine = if (lineColor == Color.Unspecified) DashColors.fill else lineColor
     Canvas(modifier = modifier) {
         if (values.isEmpty()) return@Canvas
-        val maxVal = maxOf(maxY, values.maxOrNull() ?: maxY).coerceAtLeast(1f)
+        val maxVal = maxY.coerceAtLeast(1f)
         val stepX = if (values.size <= 1) size.width else size.width / (values.size - 1)
         val path = Path()
         values.forEachIndexed { index, value ->
             val x = index * stepX
-            val y = size.height - (value / maxVal) * size.height
+            val y = size.height - (value.coerceIn(0f, maxVal) / maxVal) * size.height
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
         drawPath(
