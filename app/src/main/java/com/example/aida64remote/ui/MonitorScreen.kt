@@ -199,7 +199,8 @@ private fun DashboardGrid(
             )
             RamPanel(
                 data = data,
-                barPeaks = state.barPeaks,
+                ramTemp1Stats = state.ramTemp1Stats,
+                ramTemp2Stats = state.ramTemp2Stats,
                 modifier = Modifier.weight(RightColWeight).fillMaxSize(),
             )
         }
@@ -212,6 +213,7 @@ private fun DashboardGrid(
         ) {
             StoragePanel(
                 data = data,
+                barPeaks = state.barPeaks,
                 modifier = Modifier.weight(1.2f).fillMaxSize(),
             )
             LogoTimePanel(

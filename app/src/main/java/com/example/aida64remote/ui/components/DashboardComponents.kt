@@ -423,9 +423,16 @@ fun FpsPanel(
 @Composable
 fun RamPanel(
     data: DashboardSnapshot,
-    barPeaks: BarScalePeaks = BarScalePeaks(),
+    ramTemp1Stats: MetricStats = MetricStats(),
+    ramTemp2Stats: MetricStats = MetricStats(),
     modifier: Modifier = Modifier,
 ) {
+    val ramUsedNum = parseMetricNumber(data.ramUsed)
+    val ramFreeNum = parseMetricNumber(data.ramFree)
+    val ramTotal = when {
+        ramUsedNum != null && ramFreeNum != null -> ramUsedNum + ramFreeNum
+        else -> null
+    }
     DashPanel(modifier = modifier) {
         Row(modifier = Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
             Column(
@@ -443,24 +450,58 @@ fun RamPanel(
                     )
                 }
                 MetricBarRow(
-                    stringResource(R.string.ram_used), data.ramUsed, "", data.ramUsedBar,
-                    13.sp, 14.sp, barPeaks.ramUsed,
+                    label = stringResource(R.string.ram_used),
+                    value = data.ramUsed,
+                    progress = data.ramUsedBar,
+                    peakMax = ramTotal,
+                    labelSize = 13.sp,
+                    valueSize = 14.sp,
                 )
                 MetricBarRow(
-                    stringResource(R.string.ram_free), data.ramFree, "", data.ramFreeBar,
-                    13.sp, 14.sp, barPeaks.ramFree,
+                    label = stringResource(R.string.ram_free),
+                    value = data.ramFree,
+                    progress = data.ramFreeBar,
+                    peakMax = ramTotal,
+                    labelSize = 13.sp,
+                    valueSize = 14.sp,
                 )
                 MetricBarRow(
-                    stringResource(R.string.ram_usage), data.ramUsage, "", data.ramUsageBar,
-                    13.sp, 14.sp, barPeaks.ramUsage,
+                    label = stringResource(R.string.ram_usage),
+                    value = data.ramUsage.filter { it.isDigit() || it == '.' },
+                    unit = stringResource(R.string.unit_percent),
+                    progress = data.ramUsageBar,
+                    peakMax = 100f,
+                    labelSize = 13.sp,
+                    valueSize = 14.sp,
                 )
             }
             Column(
                 modifier = Modifier.weight(0.65f).fillMaxHeight(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.SpaceEvenly,
             ) {
-                TempValue(temp = data.boardTemp, tempSize = 32.sp)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = stringResource(R.string.ram_temp_1),
+                        color = DashColors.muted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    TempValue(temp = data.ramTemp1, tempSize = 26.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    StatsCaption(stats = ramTemp1Stats)
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = stringResource(R.string.ram_temp_2),
+                        color = DashColors.muted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    TempValue(temp = data.ramTemp2, tempSize = 26.sp)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    StatsCaption(stats = ramTemp2Stats)
+                }
             }
         }
     }
@@ -469,6 +510,7 @@ fun RamPanel(
 @Composable
 fun StoragePanel(
     data: DashboardSnapshot,
+    barPeaks: BarScalePeaks = BarScalePeaks(),
     modifier: Modifier = Modifier,
 ) {
     DashPanel(modifier = modifier) {
@@ -476,34 +518,55 @@ fun StoragePanel(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.SpaceEvenly,
         ) {
-            DriveTempRow(stringResource(R.string.drive_c), data.driveCTemp)
-            DriveTempRow(stringResource(R.string.drive_d), data.driveDTemp)
-            DriveTempRow(stringResource(R.string.drive_e), data.driveETemp)
+            DriveTempRow(stringResource(R.string.drive_c), data.driveCTemp, barPeaks.driveC)
+            DriveTempRow(stringResource(R.string.drive_d), data.driveDTemp, barPeaks.driveD)
+            DriveTempRow(stringResource(R.string.drive_e), data.driveETemp, barPeaks.driveE)
         }
     }
 }
 
 @Composable
-private fun DriveTempRow(name: String, temp: String) {
+private fun DriveTempRow(name: String, temp: String, peakMax: Float? = null) {
+    val current = parseMetricNumber(temp)
+    val progress = if (peakMax != null && peakMax > 0f && current != null) {
+        (current / peakMax).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    val maxLabel = peakMax?.let { formatScaleMax(it) }
+    val valueText = if (maxLabel == null) {
+        stringResource(R.string.temp_prefix, temp)
+    } else {
+        stringResource(R.string.temp_prefix, stringResource(R.string.metric_value_with_max_no_unit, temp, maxLabel))
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Outlined.Storage, null, tint = DashColors.text, modifier = Modifier.size(22.dp))
         Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = name,
-            color = DashColors.text,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = stringResource(R.string.temp_prefix, temp),
-            color = temperatureColor(temp),
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = name,
+                    color = DashColors.text,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = valueText,
+                    color = temperatureColor(temp),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            ThinProgressBar(progress = progress)
+        }
     }
 }
 

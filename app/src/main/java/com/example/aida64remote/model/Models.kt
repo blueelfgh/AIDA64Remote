@@ -57,7 +57,8 @@ data class DashboardSnapshot(
     val ramFreeBar: Float = 0f,
     val ramUsage: String = "—",
     val ramUsageBar: Float = 0f,
-    val boardTemp: String = "—",
+    val ramTemp1: String = "—",
+    val ramTemp2: String = "—",
     val driveCUsage: String = "—",
     val driveCBar: Float = 0f,
     val driveCTemp: String = "—",
@@ -82,11 +83,30 @@ fun Map<String, String>.toDashboard(
     gpuHistory: List<Float>,
 ): DashboardSnapshot {
     fun v(id: String, fallback: String = "—") = this[id]?.takeIf { it.isNotBlank() } ?: fallback
+    fun first(vararg ids: String, fallback: String = "—"): String {
+        for (id in ids) {
+            val value = this[id]?.takeIf { it.isNotBlank() }
+            if (value != null) return value
+        }
+        return fallback
+    }
     fun bar(id: String): Float = this[id]?.toFloatOrNull()?.coerceIn(0f, 100f)?.div(100f) ?: 0f
     fun temp(id: String): String {
-        val raw = v(id, "")
-        if (raw.isEmpty()) return "—"
-        return raw.replace("温度:", "").replace("温度：", "").trim()
+        val raw = this[id]?.takeIf { it.isNotBlank() } ?: return "—"
+        val cleaned = raw
+            .replace("温度:", "")
+            .replace("温度：", "")
+            .replace("&nbsp;", " ")
+            .trim()
+        if (cleaned.isEmpty()) return "—"
+        return if (cleaned.contains('°')) cleaned else "$cleaned°"
+    }
+    fun firstTemp(vararg ids: String): String {
+        for (id in ids) {
+            val value = temp(id)
+            if (value != "—") return value
+        }
+        return "—"
     }
 
     return DashboardSnapshot(
@@ -96,7 +116,7 @@ fun Map<String, String>.toDashboard(
         cpuClockBar = bar("Bar4p"),
         cpuUsage = v("SIV5"),
         cpuUsageBar = bar("Bar5p"),
-        gpuTemp = v("Simple29").ifBlank { v("SIV11") },
+        gpuTemp = firstTemp("SIV11", "Simple31"),
         vramUsed = v("SIV6"),
         vramUsedBar = bar("Bar6p"),
         vramFree = v("SIV7"),
@@ -108,33 +128,33 @@ fun Map<String, String>.toDashboard(
         gpuUsage = v("SIV10"),
         gpuUsageBar = bar("Bar10p"),
         gpuTempBar = bar("Bar11p"),
-        fps = v("SIV23", "0"),
+        fps = first("SIV25", "SIV23", fallback = "0"),
         fpsHistory = fpsHistory,
         gpuHistory = gpuHistory,
-        ramType = v("Simple21"),
-        ramUsed = v("Simple18"),
+        ramType = first("Simple23", "Simple21"),
+        ramUsed = first("Simple20", "Simple18"),
         ramUsedBar = bar("Bar15p"),
-        ramFree = v("Simple19"),
+        ramFree = first("Simple21", "Simple19"),
         ramFreeBar = bar("Bar16p"),
-        ramUsage = v("Simple20"),
+        ramUsage = first("Simple22", "Simple20"),
         ramUsageBar = bar("Bar17p"),
-        boardTemp = v("Simple30"),
+        ramTemp1 = temp("SIV18"),
+        ramTemp2 = temp("SIV19"),
         driveCUsage = v("SIV12"),
         driveCBar = bar("Bar12p"),
-        driveCTemp = temp("Simple26"),
+        driveCTemp = firstTemp("Simple28", "Simple26"),
         driveDUsage = v("SIV13"),
         driveDBar = bar("Bar13p"),
-        driveDTemp = temp("Simple27"),
+        driveDTemp = firstTemp("Simple29", "Simple27"),
         driveEUsage = v("SIV14"),
         driveEBar = bar("Bar14p"),
-        driveETemp = temp("Simple28"),
-        date = v("Simple31"),
-        time = v("Simple32"),
-        upload = v("SIV33"),
-        download = v("SIV34"),
-        volumeBar = (this["SIV22"]?.toFloatOrNull() ?: this["Bar22p"]?.toFloatOrNull() ?: 0f)
-            .coerceIn(0f, 100f) / 100f,
-        cpuFan = v("SIV35"),
-        gpuFan = v("SIV36"),
+        driveETemp = firstTemp("Simple30", "Simple28"),
+        date = first("Simple33", "Simple31"),
+        time = first("Simple34", "Simple32"),
+        upload = first("SIV35", "SIV33"),
+        download = first("SIV36", "SIV34"),
+        volumeBar = (this["Bar22p"]?.toFloatOrNull() ?: 0f).coerceIn(0f, 100f) / 100f,
+        cpuFan = first("SIV37", "SIV35"),
+        gpuFan = first("SIV38", "SIV36"),
     )
 }

@@ -71,6 +71,8 @@
     <string name="ram_used">已用内存</string>
     <string name="ram_free">可用内存</string>
     <string name="ram_usage">使用率</string>
+    <string name="ram_temp_1">内存1</string>
+    <string name="ram_temp_2">内存2</string>
     <string name="drive_c">C盘</string>
     <string name="drive_d">D盘</string>
     <string name="drive_e">E盘</string>

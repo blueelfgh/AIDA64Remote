@@ -43,6 +43,8 @@ data class MonitorUiState(
     val isFullscreen: Boolean = false,
     val cpuTempStats: MetricStats = MetricStats(),
     val gpuTempStats: MetricStats = MetricStats(),
+    val ramTemp1Stats: MetricStats = MetricStats(),
+    val ramTemp2Stats: MetricStats = MetricStats(),
     val fpsStats: MetricStats = MetricStats(),
     val barPeaks: BarScalePeaks = BarScalePeaks(),
 )
@@ -79,6 +81,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
 
     private val cpuTempAccumulator = MetricAccumulator()
     private val gpuTempAccumulator = MetricAccumulator()
+    private val ramTemp1Accumulator = MetricAccumulator()
+    private val ramTemp2Accumulator = MetricAccumulator()
     private val fpsAccumulator = MetricAccumulator()
     private var barPeaks = BarScalePeaks()
     private var persistPeaksJob: Job? = null
@@ -151,11 +155,15 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
     fun resetMetricStats() {
         cpuTempAccumulator.reset()
         gpuTempAccumulator.reset()
+        ramTemp1Accumulator.reset()
+        ramTemp2Accumulator.reset()
         fpsAccumulator.reset()
         _uiState.update {
             it.copy(
                 cpuTempStats = MetricStats(),
                 gpuTempStats = MetricStats(),
+                ramTemp1Stats = MetricStats(),
+                ramTemp2Stats = MetricStats(),
                 fpsStats = MetricStats(),
             )
         }
@@ -197,8 +205,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
             }
             is ConnectionEvent.SensorsUpdated -> {
                 val values = SensorParser.toMap(event.sensors)
-                pushHistory(fpsHistory, values["Gph24p"] ?: values["SIV23"])
-                pushHistory(gpuHistory, values["Gph25p"] ?: values["SIV10"])
+                pushHistory(fpsHistory, values["Gph26"] ?: values["Gph24p"] ?: values["SIV25"] ?: values["SIV23"])
+                pushHistory(gpuHistory, values["Gph27"] ?: values["Gph25p"] ?: values["SIV10"])
                 val dashboard = values.toDashboard(
                     labels = event.labels,
                     fpsHistory = fpsHistory.toList(),
@@ -213,6 +221,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
                         errorMessage = null,
                         cpuTempStats = cpuTempAccumulator.toStats(),
                         gpuTempStats = gpuTempAccumulator.toStats(),
+                        ramTemp1Stats = ramTemp1Accumulator.toStats(),
+                        ramTemp2Stats = ramTemp2Accumulator.toStats(),
                         fpsStats = fpsAccumulator.toStats(),
                         barPeaks = peaks,
                     )
@@ -237,6 +247,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
                         errorMessage = null,
                         cpuTempStats = cpuTempAccumulator.toStats(),
                         gpuTempStats = gpuTempAccumulator.toStats(),
+                        ramTemp1Stats = ramTemp1Accumulator.toStats(),
+                        ramTemp2Stats = ramTemp2Accumulator.toStats(),
                         fpsStats = fpsAccumulator.toStats(),
                         barPeaks = peaks,
                     )
@@ -297,6 +309,8 @@ class SensorViewModel(application: Application) : AndroidViewModel(application) 
     private fun recordDashboardMetrics(dashboard: DashboardSnapshot) {
         parseSensorNumber(dashboard.cpuTemp)?.let { cpuTempAccumulator.record(it) }
         parseSensorNumber(dashboard.gpuTemp)?.let { gpuTempAccumulator.record(it) }
+        parseSensorNumber(dashboard.ramTemp1)?.let { ramTemp1Accumulator.record(it) }
+        parseSensorNumber(dashboard.ramTemp2)?.let { ramTemp2Accumulator.record(it) }
         parseSensorNumber(dashboard.fps)?.let { fpsAccumulator.record(it) }
     }
 

@@ -33,9 +33,11 @@ class SettingsRepository(private val context: Context) {
     private val peakRamUsedKey = floatPreferencesKey("peak_ram_used")
     private val peakRamFreeKey = floatPreferencesKey("peak_ram_free")
     private val peakRamUsageKey = floatPreferencesKey("peak_ram_usage")
-    private val peakDriveCKey = floatPreferencesKey("peak_drive_c")
-    private val peakDriveDKey = floatPreferencesKey("peak_drive_d")
-    private val peakDriveEKey = floatPreferencesKey("peak_drive_e")
+    private val peakRamTemp1Key = floatPreferencesKey("peak_ram_temp_1")
+    private val peakRamTemp2Key = floatPreferencesKey("peak_ram_temp_2")
+    private val peakDriveCKey = floatPreferencesKey("peak_drive_c_temp")
+    private val peakDriveDKey = floatPreferencesKey("peak_drive_d_temp")
+    private val peakDriveEKey = floatPreferencesKey("peak_drive_e_temp")
     private val peakVolumeKey = floatPreferencesKey("peak_volume")
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -65,6 +67,8 @@ class SettingsRepository(private val context: Context) {
             ramUsed = prefs[peakRamUsedKey],
             ramFree = prefs[peakRamFreeKey],
             ramUsage = prefs[peakRamUsageKey],
+            ramTemp1 = prefs[peakRamTemp1Key],
+            ramTemp2 = prefs[peakRamTemp2Key],
             driveC = prefs[peakDriveCKey],
             driveD = prefs[peakDriveDKey],
             driveE = prefs[peakDriveEKey],
@@ -118,6 +122,8 @@ class SettingsRepository(private val context: Context) {
             put(peakRamUsedKey, peaks.ramUsed)
             put(peakRamFreeKey, peaks.ramFree)
             put(peakRamUsageKey, peaks.ramUsage)
+            put(peakRamTemp1Key, peaks.ramTemp1)
+            put(peakRamTemp2Key, peaks.ramTemp2)
             put(peakDriveCKey, peaks.driveC)
             put(peakDriveDKey, peaks.driveD)
             put(peakDriveEKey, peaks.driveE)
