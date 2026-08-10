@@ -1,15 +1,45 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+# macOS
 .DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+.AppleDouble
+.LSOverride
+
+# Android / Gradle
+*.iml
+.gradle/
 local.properties
+**/build/
+**/captures/
+.externalNativeBuild/
+.cxx/
+AIDA64Remote-Android/.gradle/
+AIDA64Remote-Android/local.properties
+AIDA64Remote-Android/.idea/
+AIDA64Remote-Android/app/release/
+
+# Android Studio / IntelliJ (repo root)
+.idea/
+
+# iOS / Xcode
+**/xcuserdata/
+**/*.xcuserstate
+**/DerivedData/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+AIDA64Remote-iOS/.build/
+AIDA64Remote-iOS/**/xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
+
+# Secrets / signing
+*.mobileprovision
+*.p12
+.env
