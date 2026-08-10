@@ -25,6 +25,7 @@ enum ConnectionEvent: Sendable {
     case connecting
     case connected
     case sensorsUpdated(sensors: [SensorItem], labels: [String: String])
+    case dashboardUpdated(DashboardSnapshot)
     case reconnecting(attempt: Int, message: String?)
     case disconnected(message: String?)
 }
@@ -67,7 +68,8 @@ struct DashboardSnapshot: Equatable, Sendable {
     var ramFreeBar: Float = 0
     var ramUsage: String = "—"
     var ramUsageBar: Float = 0
-    var boardTemp: String = "—"
+    var ramTemp1: String = "—"
+    var ramTemp2: String = "—"
     var drives: [DriveSnapshot] = []
     var date: String = "—"
     var time: String = "—"
@@ -76,6 +78,25 @@ struct DashboardSnapshot: Equatable, Sendable {
     var volumeBar: Float = 0
     var cpuFan: String = "—"
     var gpuFan: String = "—"
+
+    /// 至少一个主指标有真实数据（非占位符）。
+    var hasRenderableSensorData: Bool {
+        func present(_ value: String) -> Bool {
+            !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value != "—"
+        }
+        return present(cpuTemp)
+            || present(cpuClock)
+            || present(cpuUsage)
+            || present(gpuTemp)
+            || present(gpuUsage)
+            || present(ramUsage)
+    }
+}
+
+struct MetricStats: Equatable, Sendable {
+    var min: Float?
+    var max: Float?
+    var avg: Float?
 }
 
 struct MonitorUiState: Equatable, Sendable {
@@ -85,4 +106,10 @@ struct MonitorUiState: Equatable, Sendable {
     var config: ConnectionConfig = ConnectionConfig()
     var keepScreenOn: Bool = false
     var isFullscreen: Bool = false
+    var cpuTempStats: MetricStats = MetricStats()
+    var gpuTempStats: MetricStats = MetricStats()
+    var ramTemp1Stats: MetricStats = MetricStats()
+    var ramTemp2Stats: MetricStats = MetricStats()
+    var fpsStats: MetricStats = MetricStats()
+    var barPeaks: BarScalePeaks = BarScalePeaks()
 }

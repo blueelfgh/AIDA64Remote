@@ -3,25 +3,51 @@ import SwiftUI
 struct SettingsView: View {
     let initialHost: String
     let initialPort: Int
+    let serviceType: ServiceType
     let keepScreenOn: Bool
     let themeMode: ThemeMode
     let showsDisconnect: Bool
+    let onServiceTypeChange: (ServiceType) -> Void
     let onKeepScreenOnChange: (Bool) -> Void
     let onThemeModeChange: (ThemeMode) -> Void
-    let onConnect: (String, Int) -> Void
+    let onClearBarPeaks: () -> Void
+    let onConnect: (String, Int, ServiceType) -> Void
     let onDisconnect: (() -> Void)?
 
     @State private var host: String = ""
     @State private var portText: String = ""
+    @State private var selectedType: ServiceType = .aida64
     @State private var hostError: String?
     @State private var portError: String?
+    @State private var peaksClearedHint = false
 
     var body: some View {
         Form {
             Section {
-                Text("请在 PC 端 AIDA64 启用 RemoteSensor（LCD），并确保与手机在同一局域网。")
+                Text(hintText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("服务类型") {
+                Text("切换类型时，若端口仍是默认值会自动改为对应默认端口。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("服务", selection: $selectedType) {
+                    ForEach(ServiceType.allCases) { type in
+                        Text(type.title).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: selectedType) { _, newValue in
+                    onServiceTypeChange(newValue)
+                    // 若本地端口仍是默认端口之一，同步刷新输入框
+                    let port = Int(portText) ?? 0
+                    if port == ServiceType.aida64.defaultPort
+                        || port == ServiceType.libreHardwareMonitor.defaultPort {
+                        portText = String(newValue.defaultPort)
+                    }
+                }
             }
 
             Section("连接") {
@@ -76,6 +102,25 @@ struct SettingsView: View {
 
             Section {
                 Button {
+                    onClearBarPeaks()
+                    peaksClearedHint = true
+                } label: {
+                    Text("清除进度条峰值")
+                        .frame(maxWidth: .infinity)
+                }
+                if peaksClearedHint {
+                    Text("已清除历史峰值，进度条将重新按当前数据缩放。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("进度条")
+            } footer: {
+                Text("峰值用于把进度条满刻度设为历史最大值，便于观察相对负载。")
+            }
+
+            Section {
+                Button {
                     connectTapped()
                 } label: {
                     Text(showsDisconnect ? "重新连接" : "连接")
@@ -96,6 +141,23 @@ struct SettingsView: View {
         .onAppear {
             host = initialHost
             portText = String(initialPort)
+            selectedType = serviceType
+            peaksClearedHint = false
+        }
+        .onChange(of: serviceType) { _, newValue in
+            selectedType = newValue
+        }
+        .onChange(of: initialPort) { _, newValue in
+            portText = String(newValue)
+        }
+    }
+
+    private var hintText: String {
+        switch selectedType {
+        case .aida64:
+            return "请在 PC 端 AIDA64 启用 RemoteSensor（LCD），并确保与手机在同一局域网。"
+        case .libreHardwareMonitor:
+            return "请确保 PC 端 LibreHardwareMonitor 导出服务已启动（默认端口 18080），并与手机在同一局域网。"
         }
     }
 
@@ -116,7 +178,7 @@ struct SettingsView: View {
             ok = false
         }
         if ok, let port {
-            onConnect(trimmed, port)
+            onConnect(trimmed, port, selectedType)
         }
     }
 }

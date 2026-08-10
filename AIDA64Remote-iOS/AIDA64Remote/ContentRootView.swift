@@ -19,52 +19,33 @@ struct ContentRootView: View {
                         onRetry: { viewModel.connect() },
                         onOpenSettings: { path.append(Destination.settings) },
                         onToggleFullscreen: viewModel.toggleFullscreen,
-                        onExitFullscreen: { viewModel.setFullscreen(false) }
+                        onExitFullscreen: { viewModel.setFullscreen(false) },
+                        onResetStats: viewModel.resetMetricStats
                     )
                     .navigationTitle("监控")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar(.hidden, for: .navigationBar)
                 } else {
-                    SettingsView(
-                        initialHost: viewModel.savedConfig.host,
-                        initialPort: viewModel.savedConfig.port,
-                        keepScreenOn: viewModel.settings.keepScreenOn,
-                        themeMode: viewModel.settings.themeMode,
-                        showsDisconnect: false,
-                        onKeepScreenOnChange: viewModel.setKeepScreenOn,
-                        onThemeModeChange: viewModel.setThemeMode,
-                        onConnect: { host, port in
-                            didAutoConnect = true
-                            viewModel.saveAndConnect(host: host, port: port)
-                            path = NavigationPath()
-                            rootIsMonitor = true
-                        },
-                        onDisconnect: nil
-                    )
+                    settingsView(showsDisconnect: false) { host, port, type in
+                        didAutoConnect = true
+                        viewModel.saveAndConnect(host: host, port: port, serviceType: type)
+                        path = NavigationPath()
+                        rootIsMonitor = true
+                    }
                 }
             }
             .navigationDestination(for: Destination.self) { destination in
                 switch destination {
                 case .settings:
-                    SettingsView(
-                        initialHost: viewModel.savedConfig.host,
-                        initialPort: viewModel.savedConfig.port,
-                        keepScreenOn: viewModel.settings.keepScreenOn,
-                        themeMode: viewModel.settings.themeMode,
-                        showsDisconnect: true,
-                        onKeepScreenOnChange: viewModel.setKeepScreenOn,
-                        onThemeModeChange: viewModel.setThemeMode,
-                        onConnect: { host, port in
-                            didAutoConnect = true
-                            viewModel.saveAndConnect(host: host, port: port)
-                            path.removeLast()
-                        },
-                        onDisconnect: {
-                            viewModel.disconnect()
-                            path = NavigationPath()
-                            rootIsMonitor = false
-                        }
-                    )
+                    settingsView(showsDisconnect: true) { host, port, type in
+                        didAutoConnect = true
+                        viewModel.saveAndConnect(host: host, port: port, serviceType: type)
+                        path.removeLast()
+                    } onDisconnect: {
+                        viewModel.disconnect()
+                        path = NavigationPath()
+                        rootIsMonitor = false
+                    }
                 }
             }
         }
@@ -75,6 +56,28 @@ struct ContentRootView: View {
         .onChange(of: viewModel.settings.host) { _, _ in
             autoConnectIfNeeded()
         }
+    }
+
+    @ViewBuilder
+    private func settingsView(
+        showsDisconnect: Bool,
+        onConnect: @escaping (String, Int, ServiceType) -> Void,
+        onDisconnect: (() -> Void)? = nil
+    ) -> some View {
+        SettingsView(
+            initialHost: viewModel.savedConfig.host,
+            initialPort: viewModel.savedConfig.port,
+            serviceType: viewModel.savedConfig.serviceType,
+            keepScreenOn: viewModel.settings.keepScreenOn,
+            themeMode: viewModel.settings.themeMode,
+            showsDisconnect: showsDisconnect,
+            onServiceTypeChange: viewModel.setServiceType,
+            onKeepScreenOnChange: viewModel.setKeepScreenOn,
+            onThemeModeChange: viewModel.setThemeMode,
+            onClearBarPeaks: viewModel.clearBarScalePeaks,
+            onConnect: onConnect,
+            onDisconnect: onDisconnect
+        )
     }
 
     private func autoConnectIfNeeded() {

@@ -6,15 +6,14 @@ struct MonitorView: View {
     let onOpenSettings: () -> Void
     let onToggleFullscreen: () -> Void
     let onExitFullscreen: () -> Void
+    let onResetStats: () -> Void
 
     @Environment(\.dashColors) private var colors
 
     private var isWaitingData: Bool {
         state.status == .connecting
             || state.status == .reconnecting
-            || (state.status == .connected
-                && state.dashboard.cpuTemp == "—"
-                && state.dashboard.cpuClock == "—")
+            || (state.status == .connected && !state.dashboard.hasRenderableSensorData)
     }
 
     var body: some View {
@@ -37,7 +36,8 @@ struct MonitorView: View {
                         DashboardLayout(
                             state: state,
                             onOpenSettings: onOpenSettings,
-                            onToggleFullscreen: onToggleFullscreen
+                            onToggleFullscreen: onToggleFullscreen,
+                            onResetStats: onResetStats
                         )
                     }
                 }
@@ -78,6 +78,7 @@ private struct DashboardLayout: View {
     let state: MonitorUiState
     let onOpenSettings: () -> Void
     let onToggleFullscreen: () -> Void
+    let onResetStats: () -> Void
 
     var body: some View {
         GeometryReader { geo in
@@ -93,19 +94,17 @@ private struct DashboardLayout: View {
 
                 if landscape {
                     LandscapeDashboard(
-                        data: state.dashboard,
-                        keepScreenOn: state.keepScreenOn,
-                        isFullscreen: state.isFullscreen,
+                        state: state,
                         gap: gap,
-                        onToggleFullscreen: onToggleFullscreen
+                        onToggleFullscreen: onToggleFullscreen,
+                        onResetStats: onResetStats
                     )
                 } else {
                     PortraitDashboard(
-                        data: state.dashboard,
-                        keepScreenOn: state.keepScreenOn,
-                        isFullscreen: state.isFullscreen,
+                        state: state,
                         gap: gap,
-                        onToggleFullscreen: onToggleFullscreen
+                        onToggleFullscreen: onToggleFullscreen,
+                        onResetStats: onResetStats
                     )
                 }
             }
@@ -116,99 +115,161 @@ private struct DashboardLayout: View {
 }
 
 private struct LandscapeDashboard: View {
-    let data: DashboardSnapshot
-    let keepScreenOn: Bool
-    let isFullscreen: Bool
+    let state: MonitorUiState
     let gap: CGFloat
     let onToggleFullscreen: () -> Void
+    let onResetStats: () -> Void
+
+    private var data: DashboardSnapshot { state.dashboard }
+
+    /// 对齐 Android：上两行左右约 1 : 1.15，底行 1.2 : 0.85 : 1。
+    private let leftWeight: CGFloat = 1
+    private let rightWeight: CGFloat = 1.15
+    private let rowWeights: [CGFloat] = [1.1, 1.1, 1.0]
+    private let bottomWeights: [CGFloat] = [1.2, 0.85, 1.0]
 
     var body: some View {
         GeometryReader { geo in
             let rowGap = gap
-            let usable = geo.size.height - rowGap * 2
-            let row1 = usable * 0.36
-            let row2 = usable * 0.34
-            let row3 = usable * 0.30
+            let usableH = max(geo.size.height - rowGap * 2, 0)
+            let rowHs = proportionalSizes(total: usableH, weights: rowWeights)
             let colGap = gap
-            let leftW = (geo.size.width - colGap) * 0.46
-            let rightW = geo.size.width - colGap - leftW
+            let usableW = max(geo.size.width - colGap, 0)
+            let topCols = proportionalSizes(total: usableW, weights: [leftWeight, rightWeight])
+            let bottomUsableW = max(geo.size.width - colGap * 2, 0)
+            let bottomCols = proportionalSizes(total: bottomUsableW, weights: bottomWeights)
 
             VStack(spacing: rowGap) {
                 HStack(spacing: colGap) {
-                    CpuPanel(data: data, showKeepScreenOn: keepScreenOn, density: .regular)
-                        .frame(width: leftW, height: row1)
-                    GpuPanel(data: data, density: .compact)
-                        .frame(width: rightW, height: row1)
+                    CpuPanel(
+                        data: data,
+                        cpuTempStats: state.cpuTempStats,
+                        barPeaks: state.barPeaks,
+                        showKeepScreenOn: state.keepScreenOn,
+                        density: .compact
+                    )
+                    .frame(width: topCols[0], height: rowHs[0])
+                    .clipped()
+                    GpuPanel(
+                        data: data,
+                        gpuTempStats: state.gpuTempStats,
+                        barPeaks: state.barPeaks,
+                        density: .compact,
+                        forceTwoColumnMetrics: true
+                    )
+                    .frame(width: topCols[1], height: rowHs[0])
+                    .clipped()
                 }
+                .frame(width: geo.size.width, height: rowHs[0], alignment: .top)
+                .clipped()
 
                 HStack(spacing: colGap) {
-                    FpsPanel(data: data)
-                        .frame(width: leftW, height: row2)
-                    RamPanel(data: data, density: .regular)
-                        .frame(width: rightW, height: row2)
+                    FpsPanel(data: data, fpsStats: state.fpsStats)
+                        .frame(width: topCols[0], height: rowHs[1])
+                        .clipped()
+                    RamPanel(
+                        data: data,
+                        ramTemp1Stats: state.ramTemp1Stats,
+                        ramTemp2Stats: state.ramTemp2Stats,
+                        density: .compact
+                    )
+                    .frame(width: topCols[1], height: rowHs[1])
+                    .clipped()
                 }
+                .frame(width: geo.size.width, height: rowHs[1], alignment: .top)
+                .clipped()
 
                 HStack(spacing: colGap) {
-                    let total = geo.size.width - colGap * 2
-                    StoragePanel(data: data, density: .compact)
-                        .frame(width: total * 0.38, height: row3)
-                    LogoTimePanel(data: data, density: .compact)
-                        .frame(width: total * 0.28, height: row3)
+                    StoragePanel(data: data, barPeaks: state.barPeaks, density: .compact)
+                        .frame(width: bottomCols[0], height: rowHs[2])
+                        .clipped()
+                    LogoTimePanel(data: data, density: .compact, onResetStats: onResetStats)
+                        .frame(width: bottomCols[1], height: rowHs[2])
+                        .clipped()
                     NetFanPanel(
                         data: data,
+                        barPeaks: state.barPeaks,
                         density: .compact,
-                        isFullscreen: isFullscreen,
+                        isFullscreen: state.isFullscreen,
                         onToggleFullscreen: onToggleFullscreen
                     )
-                    .frame(width: total * 0.34, height: row3)
+                    .frame(width: bottomCols[2], height: rowHs[2])
+                    .clipped()
                 }
+                .frame(width: geo.size.width, height: rowHs[2], alignment: .top)
+                .clipped()
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            .clipped()
         }
+    }
+
+    private func proportionalSizes(total: CGFloat, weights: [CGFloat]) -> [CGFloat] {
+        let sum = weights.reduce(0, +)
+        guard sum > 0 else { return weights.map { _ in 0 } }
+        return weights.map { floor(total * ($0 / sum)) }
     }
 }
 
 private struct PortraitDashboard: View {
-    let data: DashboardSnapshot
-    let keepScreenOn: Bool
-    let isFullscreen: Bool
+    let state: MonitorUiState
     let gap: CGFloat
     let onToggleFullscreen: () -> Void
+    let onResetStats: () -> Void
+
+    private var data: DashboardSnapshot { state.dashboard }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: gap) {
-                CpuPanel(data: data, showKeepScreenOn: keepScreenOn, density: .regular)
-                    .frame(minHeight: 120)
-                    .frame(maxWidth: .infinity)
-                    .aspectRatio(2.4, contentMode: .fit)
+                CpuPanel(
+                    data: data,
+                    cpuTempStats: state.cpuTempStats,
+                    barPeaks: state.barPeaks,
+                    showKeepScreenOn: state.keepScreenOn,
+                    density: .regular
+                )
+                .frame(minHeight: 120)
+                .frame(maxWidth: .infinity)
+                .aspectRatio(2.4, contentMode: .fit)
 
-                GpuPanel(data: data, density: .regular)
-                    .frame(minHeight: 160)
-                    .frame(maxWidth: .infinity)
-                    .aspectRatio(1.8, contentMode: .fit)
+                GpuPanel(
+                    data: data,
+                    gpuTempStats: state.gpuTempStats,
+                    barPeaks: state.barPeaks,
+                    density: .regular
+                )
+                .frame(minHeight: 160)
+                .frame(maxWidth: .infinity)
+                .aspectRatio(1.8, contentMode: .fit)
 
                 HStack(spacing: gap) {
-                    FpsPanel(data: data)
+                    FpsPanel(data: data, fpsStats: state.fpsStats)
                         .frame(maxWidth: .infinity)
                         .frame(height: 140)
-                    RamPanel(data: data, density: .compact)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 140)
+                    RamPanel(
+                        data: data,
+                        ramTemp1Stats: state.ramTemp1Stats,
+                        ramTemp2Stats: state.ramTemp2Stats,
+                        density: .compact
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 140)
                 }
 
-                StoragePanel(data: data, density: .regular)
+                StoragePanel(data: data, barPeaks: state.barPeaks, density: .regular)
                     .frame(minHeight: 120)
                     .frame(maxWidth: .infinity)
 
                 HStack(spacing: gap) {
-                    LogoTimePanel(data: data, density: .regular)
+                    LogoTimePanel(data: data, density: .regular, onResetStats: onResetStats)
                         .frame(maxWidth: .infinity)
                         .frame(height: 140)
                     NetFanPanel(
                         data: data,
+                        barPeaks: state.barPeaks,
                         density: .compact,
-                        isFullscreen: isFullscreen,
+                        isFullscreen: state.isFullscreen,
                         onToggleFullscreen: onToggleFullscreen
                     )
                     .frame(maxWidth: .infinity)

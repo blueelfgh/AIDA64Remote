@@ -66,6 +66,7 @@ struct DashPanel<Content: View>: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(colors.border, lineWidth: 1)
             )
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .clipped()
     }
 }
@@ -75,7 +76,6 @@ struct ThinProgressBar: View {
     @Environment(\.dashColors) private var colors
 
     var body: some View {
-        // 不用裸 GeometryReader 撑开父布局：用 Preference/背景比例填充。
         Capsule(style: .continuous)
             .fill(colors.track)
             .frame(height: 7)
@@ -94,8 +94,26 @@ struct MetricBarRow: View {
     let value: String
     var unit: String = ""
     let progress: Float
+    var peakMax: Float? = nil
     var density: PanelDensity = .regular
     @Environment(\.dashColors) private var colors
+
+    private var resolvedProgress: Float {
+        if let peakMax, peakMax > 0, let current = parseSensorNumber(value) {
+            return min(max(current / peakMax, 0), 1)
+        }
+        return progress
+    }
+
+    private var valueText: String {
+        let maxLabel = peakMax.map(formatScaleMax)
+        switch (maxLabel, unit.isEmpty) {
+        case (nil, true): return value
+        case (nil, false): return "\(value) \(unit)"
+        case (let max?, true): return "\(value) / \(max)"
+        case (let max?, false): return "\(value) / \(max) \(unit)"
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -106,14 +124,36 @@ struct MetricBarRow: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 Spacer(minLength: 4)
-                Text(unit.isEmpty ? value : "\(value) \(unit)")
+                Text(valueText)
                     .font(.system(size: density.valueSize, weight: .bold))
                     .foregroundStyle(colors.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
-            ThinProgressBar(progress: progress)
+            ThinProgressBar(progress: resolvedProgress)
         }
+    }
+}
+
+struct StatsCaption: View {
+    let stats: MetricStats
+    var decimals: Int = 0
+    @Environment(\.dashColors) private var colors
+
+    var body: some View {
+        Text("高 \(formatStat(stats.max)) 低 \(formatStat(stats.min)) 均 \(formatStat(stats.avg))")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(colors.muted)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+    }
+
+    private func formatStat(_ value: Float?) -> String {
+        guard let value else { return "—" }
+        if decimals <= 0 {
+            return String(Int(value.rounded()))
+        }
+        return String(format: "%.\(decimals)f", value)
     }
 }
 
@@ -152,10 +192,17 @@ struct TempValue: View {
     var tempSize: CGFloat = 32
     @Environment(\.dashColors) private var colors
 
+    private var color: Color {
+        guard let value = parseSensorNumber(temp) else { return colors.text }
+        if value > 85 { return colors.accentRed }
+        if value > 75 { return colors.accentYellow }
+        return colors.text
+    }
+
     var body: some View {
         Text(temp)
             .font(.system(size: tempSize, weight: .bold))
-            .foregroundStyle(colors.text)
+            .foregroundStyle(color)
             .lineLimit(1)
             .minimumScaleFactor(0.5)
     }
@@ -163,6 +210,8 @@ struct TempValue: View {
 
 struct CpuPanel: View {
     let data: DashboardSnapshot
+    var cpuTempStats: MetricStats = MetricStats()
+    var barPeaks: BarScalePeaks = BarScalePeaks()
     var showKeepScreenOn: Bool = false
     var density: PanelDensity = .regular
     @Environment(\.dashColors) private var colors
@@ -183,8 +232,11 @@ struct CpuPanel: View {
                 }
 
                 HStack(alignment: .center, spacing: 8) {
-                    TempValue(temp: data.cpuTemp, tempSize: density.tempSize)
-                        .frame(minWidth: density == .compact ? 52 : 64)
+                    VStack(spacing: 4) {
+                        TempValue(temp: data.cpuTemp, tempSize: density.tempSize)
+                        StatsCaption(stats: cpuTempStats)
+                    }
+                    .frame(minWidth: density == .compact ? 52 : 64)
 
                     VStack(alignment: .leading, spacing: density.metricSpacing) {
                         Text(data.cpuName)
@@ -197,6 +249,7 @@ struct CpuPanel: View {
                             value: data.cpuClock,
                             unit: "MHz",
                             progress: data.cpuClockBar,
+                            peakMax: barPeaks.cpuClock,
                             density: density
                         )
                         MetricBarRow(
@@ -204,6 +257,7 @@ struct CpuPanel: View {
                             value: data.cpuUsage,
                             unit: "%",
                             progress: data.cpuUsageBar,
+                            peakMax: barPeaks.cpuUsage,
                             density: density
                         )
                     }
@@ -218,46 +272,63 @@ struct CpuPanel: View {
 
 struct GpuPanel: View {
     let data: DashboardSnapshot
+    var gpuTempStats: MetricStats = MetricStats()
+    var barPeaks: BarScalePeaks = BarScalePeaks()
     var density: PanelDensity = .compact
+    /// 横屏等矮面板强制双列指标，避免单列撑破行高。
+    var forceTwoColumnMetrics: Bool = false
 
     private var gpuTempDigits: String {
         String(data.gpuTemp.filter { $0.isNumber || $0 == "." })
+    }
+
+    private var rows: [(String, String, String, Float, Float?)] {
+        let short = density == .compact
+        return [
+            (short ? "已用显存" : "已用显存", data.vramUsed, "MB", data.vramUsedBar, barPeaks.vramUsed),
+            (short ? "可用显存" : "可用显存", data.vramFree, "MB", data.vramFreeBar, barPeaks.vramFree),
+            (short ? "核心频率" : "GPU 核心频率", data.gpuClock, "MHz", data.gpuClockBar, barPeaks.gpuClock),
+            (short ? "显存频率" : "GPU 显存频率", data.gpuMemClock, "MHz", data.gpuMemClockBar, barPeaks.gpuMemClock),
+            (short ? "使用率" : "GPU 使用率", data.gpuUsage, "%", data.gpuUsageBar, barPeaks.gpuUsage),
+            (short ? "温度" : "GPU 温度", gpuTempDigits, "°C", data.gpuTempBar, barPeaks.gpuTemp),
+        ]
     }
 
     var body: some View {
         DashPanel(density: density) {
             GeometryReader { geo in
                 let narrow = geo.size.width < 280
-                let rows: [(String, String, String, Float)] = [
-                    ("已用显存", data.vramUsed, "MB", data.vramUsedBar),
-                    ("可用显存", data.vramFree, "MB", data.vramFreeBar),
-                    ("GPU 核心频率", data.gpuClock, "MHz", data.gpuClockBar),
-                    ("GPU 显存频率", data.gpuMemClock, "MHz", data.gpuMemClockBar),
-                    ("GPU 使用率", data.gpuUsage, "%", data.gpuUsageBar),
-                    ("GPU 温度", gpuTempDigits, "°C", data.gpuTempBar),
-                ]
+                let columns = forceTwoColumnMetrics || geo.size.height < 160 || !narrow ? 2 : 1
+                let tempSize = min(density.tempSize, max(18, geo.size.height * 0.28))
 
                 Group {
-                    if narrow {
+                    if narrow && columns == 1 {
                         VStack(alignment: .leading, spacing: density.metricSpacing) {
-                            TempValue(temp: data.gpuTemp, tempSize: density.tempSize)
+                            VStack(spacing: 2) {
+                                TempValue(temp: data.gpuTemp, tempSize: tempSize)
+                                StatsCaption(stats: gpuTempStats)
+                            }
                             metricsGrid(rows: rows, columns: 1)
                         }
                     } else {
-                        HStack(alignment: .center, spacing: 8) {
-                            TempValue(temp: data.gpuTemp, tempSize: density.tempSize)
-                                .frame(minWidth: 56)
-                            metricsGrid(rows: rows, columns: geo.size.height < 140 ? 2 : 1)
+                        HStack(alignment: .center, spacing: 6) {
+                            VStack(spacing: 2) {
+                                TempValue(temp: data.gpuTemp, tempSize: tempSize)
+                                StatsCaption(stats: gpuTempStats)
+                            }
+                            .frame(width: min(64, geo.size.width * 0.18))
+                            metricsGrid(rows: rows, columns: columns)
                         }
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
+                .clipped()
             }
         }
     }
 
     @ViewBuilder
-    private func metricsGrid(rows: [(String, String, String, Float)], columns: Int) -> some View {
+    private func metricsGrid(rows: [(String, String, String, Float, Float?)], columns: Int) -> some View {
         if columns == 2 {
             let mid = (rows.count + 1) / 2
             HStack(alignment: .top, spacing: 8) {
@@ -271,7 +342,7 @@ struct GpuPanel: View {
         }
     }
 
-    private func metricColumn(_ rows: [(String, String, String, Float)]) -> some View {
+    private func metricColumn(_ rows: [(String, String, String, Float, Float?)]) -> some View {
         VStack(spacing: density.metricSpacing) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                 MetricBarRow(
@@ -279,6 +350,7 @@ struct GpuPanel: View {
                     value: row.1,
                     unit: row.2,
                     progress: row.3,
+                    peakMax: row.4,
                     density: density
                 )
             }
@@ -288,6 +360,7 @@ struct GpuPanel: View {
 
 struct FpsPanel: View {
     let data: DashboardSnapshot
+    var fpsStats: MetricStats = MetricStats()
     @Environment(\.dashColors) private var colors
 
     var body: some View {
@@ -301,10 +374,13 @@ struct FpsPanel: View {
                     .font(.system(size: 11))
                     .foregroundStyle(colors.muted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                Text("\(data.fps) FPS")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(colors.text)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(data.fps) FPS")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(colors.text)
+                    StatsCaption(stats: fpsStats)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 Sparkline(values: data.fpsHistory, maxY: 120, lineColor: colors.sparkline)
                     .padding(.leading, 22)
                     .padding(.top, 18)
@@ -317,39 +393,92 @@ struct FpsPanel: View {
 
 struct RamPanel: View {
     let data: DashboardSnapshot
+    var ramTemp1Stats: MetricStats = MetricStats()
+    var ramTemp2Stats: MetricStats = MetricStats()
     var density: PanelDensity = .regular
     @Environment(\.dashColors) private var colors
 
+    private var ramTotal: Float? {
+        guard let used = parseSensorNumber(data.ramUsed),
+              let free = parseSensorNumber(data.ramFree)
+        else { return nil }
+        return used + free
+    }
+
+    private var showTemp2: Bool {
+        let t = data.ramTemp2.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !t.isEmpty && t != "—"
+    }
+
     var body: some View {
         DashPanel(density: density) {
-            HStack(alignment: .center, spacing: 8) {
+            HStack(alignment: .center, spacing: 6) {
                 VStack(alignment: .leading, spacing: density.metricSpacing) {
                     HStack(spacing: 6) {
                         Image(systemName: "memorychip")
                             .foregroundStyle(colors.text)
-                            .font(.system(size: density == .compact ? 16 : 20))
+                            .font(.system(size: density == .compact ? 14 : 20))
                         Text(data.ramType)
                             .font(.system(size: density.titleSize, weight: .bold))
                             .foregroundStyle(colors.text)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
-                    MetricBarRow(label: "已用内存", value: data.ramUsed, progress: data.ramUsedBar, density: density)
-                    MetricBarRow(label: "可用内存", value: data.ramFree, progress: data.ramFreeBar, density: density)
-                    MetricBarRow(label: "使用率", value: data.ramUsage, progress: data.ramUsageBar, density: density)
+                    MetricBarRow(
+                        label: "已用内存",
+                        value: data.ramUsed,
+                        progress: data.ramUsedBar,
+                        peakMax: ramTotal,
+                        density: density
+                    )
+                    MetricBarRow(
+                        label: "可用内存",
+                        value: data.ramFree,
+                        progress: data.ramFreeBar,
+                        peakMax: ramTotal,
+                        density: density
+                    )
+                    MetricBarRow(
+                        label: "使用率",
+                        value: String(data.ramUsage.filter { $0.isNumber || $0 == "." }),
+                        unit: "%",
+                        progress: data.ramUsageBar,
+                        peakMax: 100,
+                        density: density
+                    )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                TempValue(temp: data.boardTemp, tempSize: density.tempSize)
-                    .frame(width: density == .compact ? 56 : 72)
+                VStack(spacing: density == .compact ? 4 : 8) {
+                    tempBlock(title: showTemp2 ? "内存温度1" : "主板温度", temp: data.ramTemp1, stats: ramTemp1Stats)
+                    if showTemp2 {
+                        tempBlock(title: "内存温度2", temp: data.ramTemp2, stats: ramTemp2Stats)
+                    }
+                }
+                .frame(width: density == .compact ? (showTemp2 ? 68 : 64) : 88)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+        }
+    }
+
+    @ViewBuilder
+    private func tempBlock(title: String, temp: String, stats: MetricStats) -> some View {
+        VStack(spacing: 1) {
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(colors.muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            TempValue(temp: temp, tempSize: density == .compact ? 20 : 26)
+            StatsCaption(stats: stats)
         }
     }
 }
 
 struct StoragePanel: View {
     let data: DashboardSnapshot
+    var barPeaks: BarScalePeaks = BarScalePeaks()
     var density: PanelDensity = .compact
     @Environment(\.dashColors) private var colors
 
@@ -368,6 +497,7 @@ struct StoragePanel: View {
                             usage: drive.usage,
                             bar: drive.bar,
                             temp: drive.temp,
+                            peakMax: barPeaks.peak(forDrive: drive.letter),
                             density: density
                         )
                     }
@@ -382,8 +512,16 @@ struct StoragePanel: View {
         let usage: String
         let bar: Float
         let temp: String
+        var peakMax: Float?
         var density: PanelDensity
         @Environment(\.dashColors) private var colors
+
+        private var tempText: String {
+            if let peakMax {
+                return "温度: \(temp) / \(formatScaleMax(peakMax))"
+            }
+            return "温度: \(temp)"
+        }
 
         var body: some View {
             HStack(spacing: 6) {
@@ -398,7 +536,7 @@ struct StoragePanel: View {
                         .minimumScaleFactor(0.75)
                     ThinProgressBar(progress: bar)
                 }
-                Text("温度: \(temp)")
+                Text(tempText)
                     .font(.system(size: density.labelSize, weight: .medium))
                     .foregroundStyle(colors.text)
                     .lineLimit(1)
@@ -412,19 +550,28 @@ struct StoragePanel: View {
 struct LogoTimePanel: View {
     let data: DashboardSnapshot
     var density: PanelDensity = .compact
+    var onResetStats: (() -> Void)?
     @Environment(\.dashColors) private var colors
 
     var body: some View {
         DashPanel(density: density) {
-            // 对齐 Android LibreHardwareMonitorClient：无品牌，日期 22 / 时间 36，并随面板放大。
             GeometryReader { geo in
-                let dateSize = max(22, min(geo.size.height * 0.22, 28))
-                let timeSize = max(36, min(geo.size.height * 0.42, 52))
-                let dateIcon = max(22, dateSize)
-                let timeIcon = max(28, timeSize * 0.72)
+                let hasReset = onResetStats != nil
+                let dateSize = max(16, min(geo.size.height * (hasReset ? 0.18 : 0.22), 26))
+                let timeSize = max(22, min(geo.size.height * (hasReset ? 0.32 : 0.42), 44))
+                let dateIcon = max(16, dateSize * 0.9)
+                let timeIcon = max(20, timeSize * 0.7)
 
-                VStack(spacing: max(geo.size.height * 0.1, 10)) {
-                    HStack(spacing: 8) {
+                VStack(spacing: max(geo.size.height * 0.05, 4)) {
+                    if let onResetStats {
+                        Button("重置统计", action: onResetStats)
+                            .font(.system(size: min(13, geo.size.height * 0.12), weight: .bold))
+                            .foregroundStyle(colors.accentYellow)
+                            .buttonStyle(.plain)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    HStack(spacing: 6) {
                         Image(systemName: "calendar")
                             .font(.system(size: dateIcon, weight: .semibold))
                             .foregroundStyle(colors.text)
@@ -432,9 +579,9 @@ struct LogoTimePanel: View {
                             .font(.system(size: dateSize, weight: .semibold))
                             .foregroundStyle(colors.text)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.6)
+                            .minimumScaleFactor(0.5)
                     }
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         Image(systemName: "clock")
                             .font(.system(size: timeIcon, weight: .semibold))
                             .foregroundStyle(colors.text)
@@ -442,10 +589,11 @@ struct LogoTimePanel: View {
                             .font(.system(size: timeSize, weight: .bold))
                             .foregroundStyle(colors.text)
                             .lineLimit(1)
-                            .minimumScaleFactor(0.5)
+                            .minimumScaleFactor(0.4)
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
             }
         }
     }
@@ -453,6 +601,7 @@ struct LogoTimePanel: View {
 
 struct NetFanPanel: View {
     let data: DashboardSnapshot
+    var barPeaks: BarScalePeaks = BarScalePeaks()
     var density: PanelDensity = .compact
     var isFullscreen: Bool = false
     var onToggleFullscreen: (() -> Void)?
@@ -460,6 +609,13 @@ struct NetFanPanel: View {
 
     private var gpuFanColor: Color {
         (Int(data.gpuFan) ?? 0) == 0 ? colors.accentRed : colors.accentYellow
+    }
+
+    private var volumeProgress: Float {
+        if let peak = barPeaks.volume, peak > 0 {
+            return min(max(data.volumeBar * 100 / peak, 0), 1)
+        }
+        return data.volumeBar
     }
 
     var body: some View {
@@ -486,7 +642,7 @@ struct NetFanPanel: View {
                     HStack(spacing: 8) {
                         Image(systemName: "speaker.wave.2")
                             .foregroundStyle(colors.text)
-                        ThinProgressBar(progress: data.volumeBar)
+                        ThinProgressBar(progress: volumeProgress)
                     }
                     FanRow(label: "CPU/FAN", value: data.cpuFan, color: colors.accentYellow, density: density)
                     FanRow(label: "GPU/FAN", value: data.gpuFan, color: gpuFanColor, density: density)

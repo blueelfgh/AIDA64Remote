@@ -135,7 +135,9 @@ extension Dictionary where Key == String, Value == String {
             ramFreeBar: bar("Bar14p"),
             ramUsage: v("Simple19"),
             ramUsageBar: bar("Bar16p"),
-            boardTemp: firstTemp("Simple30"),
+            // AIDA64 现网页没有独立 DIMM 温度；主板温度填入 RAM 槽 1，槽 2 留空。
+            ramTemp1: firstTemp("Simple30"),
+            ramTemp2: "—",
             drives: drives,
             date: v("Simple31"),
             time: v("Simple32"),

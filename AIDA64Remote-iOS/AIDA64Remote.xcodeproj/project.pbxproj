@@ -24,6 +24,8 @@
 		8E7EB1399CD64B699968FAEE /* DashboardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E39253EAA674F1A9E3D1DEE /* DashboardComponents.swift */; };
 		9C652FB03DF949A693AEFD96 /* DashColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81B5B0BF038A4BF2AECB34D0 /* DashColors.swift */; };
 		FD98524651304C3185876FC6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2C9E8EEA6B4B4BF3B4A41EBD /* Assets.xcassets */; };
+		A3C076BFA7F9464892DC8096 /* LhmHttpClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF809C259F0042D48E05B0E0 /* LhmHttpClient.swift */; };
+		73C9D6B68381494A8CC6C7EA /* BarScalePeaks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27FEE9C3D9EC4752B8C6FC45 /* BarScalePeaks.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,6 +59,8 @@
 		F9178681514B4809BEF4D69D /* SensorParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SensorParserTests.swift; sourceTree = "<group>"; };
 		F921DB0F610F4D9D85681C63 /* HtmlLabelParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HtmlLabelParser.swift; sourceTree = "<group>"; };
 		F94A72F1D5844BF5B2E514C3 /* AIDA64RemoteTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AIDA64RemoteTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FF809C259F0042D48E05B0E0 /* LhmHttpClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LhmHttpClient.swift; sourceTree = "<group>"; };
+		27FEE9C3D9EC4752B8C6FC45 /* BarScalePeaks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarScalePeaks.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -151,6 +155,8 @@
 			children = (
 				6463BFE407744D76BB1A7C00 /* ConnectionConfig.swift */,
 				764E8E91E1FB418C93F12B52 /* SensorParser.swift */,
+				27FEE9C3D9EC4752B8C6FC45 /* BarScalePeaks.swift */,
+				FF809C259F0042D48E05B0E0 /* LhmHttpClient.swift */,
 				F921DB0F610F4D9D85681C63 /* HtmlLabelParser.swift */,
 				98CC373444DF41B4A5BB8CFA /* Aida64SseClient.swift */,
 				17117AB070F24CD7AE8D7576 /* SettingsStore.swift */,
@@ -270,6 +276,8 @@
 				445ACE44D6654B91806A6433 /* ContentRootView.swift in Sources */,
 				5C1CFE698DCC419387098245 /* ConnectionConfig.swift in Sources */,
 				6660175070ED4E36AEFEB80C /* SensorParser.swift in Sources */,
+				73C9D6B68381494A8CC6C7EA /* BarScalePeaks.swift in Sources */,
+				A3C076BFA7F9464892DC8096 /* LhmHttpClient.swift in Sources */,
 				59870377C1F04D85BF500876 /* HtmlLabelParser.swift in Sources */,
 				40E99356DAE34AD48FA510CA /* Aida64SseClient.swift in Sources */,
 				2246265A541C4A978C2C29A7 /* SettingsStore.swift in Sources */,
