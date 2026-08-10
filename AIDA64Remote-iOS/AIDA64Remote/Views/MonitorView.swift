@@ -125,7 +125,7 @@ private struct LandscapeDashboard: View {
     /// 对齐 Android：上两行左右约 1 : 1.15，底行 1.2 : 0.85 : 1。
     private let leftWeight: CGFloat = 1
     private let rightWeight: CGFloat = 1.15
-    private let rowWeights: [CGFloat] = [1.1, 1.1, 1.0]
+    private let rowWeights: [CGFloat] = [1.05, 1.05, 1.15]
     private let bottomWeights: [CGFloat] = [1.2, 0.85, 1.0]
 
     var body: some View {
@@ -206,8 +206,11 @@ private struct LandscapeDashboard: View {
 
     private func proportionalSizes(total: CGFloat, weights: [CGFloat]) -> [CGFloat] {
         let sum = weights.reduce(0, +)
-        guard sum > 0 else { return weights.map { _ in 0 } }
-        return weights.map { floor(total * ($0 / sum)) }
+        guard sum > 0, !weights.isEmpty else { return weights.map { _ in 0 } }
+        var sizes = weights.map { floor(total * ($0 / sum)) }
+        let used = sizes.reduce(0, +)
+        sizes[sizes.count - 1] += total - used
+        return sizes
     }
 }
 

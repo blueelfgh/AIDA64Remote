@@ -67,7 +67,6 @@ struct DashPanel<Content: View>: View {
                     .stroke(colors.border, lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .clipped()
     }
 }
 
@@ -620,45 +619,77 @@ struct NetFanPanel: View {
 
     var body: some View {
         DashPanel(density: density) {
-            ZStack(alignment: .bottomTrailing) {
-                VStack(alignment: .leading, spacing: density.metricSpacing + 2) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "cloud")
-                            .font(.system(size: density == .compact ? 16 : 20))
-                            .foregroundStyle(colors.text)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("上传  \(data.upload) KB/s")
-                                .font(.system(size: density.labelSize + 1, weight: .semibold))
-                                .foregroundStyle(colors.text)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                            Text("下载  \(data.download) KB/s")
-                                .font(.system(size: density.labelSize + 1, weight: .semibold))
-                                .foregroundStyle(colors.text)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                        }
-                    }
-                    HStack(spacing: 8) {
-                        Image(systemName: "speaker.wave.2")
-                            .foregroundStyle(colors.text)
-                        ThinProgressBar(progress: volumeProgress)
-                    }
-                    FanRow(label: "CPU/FAN", value: data.cpuFan, color: colors.accentYellow, density: density)
-                    FanRow(label: "GPU/FAN", value: data.gpuFan, color: gpuFanColor, density: density)
-                }
-                .padding(.bottom, onToggleFullscreen == nil ? 0 : 22)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            GeometryReader { geo in
+                let tight = geo.size.height < 120
+                let spacing = tight ? max(2, geo.size.height * 0.04) : CGFloat(density.metricSpacing + 2)
+                let iconSize: CGFloat = tight ? 13 : (density == .compact ? 16 : 20)
+                let labelSize: CGFloat = tight ? 10 : density.labelSize + 1
+                let fanLabelWidth: CGFloat = tight ? 52 : (density == .compact ? 58 : 72)
 
-                if let onToggleFullscreen {
-                    Button(action: onToggleFullscreen) {
-                        Image(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                            .foregroundStyle(colors.text)
-                            .font(.system(size: 14, weight: .semibold))
-                            .padding(4)
+                ZStack(alignment: .bottomTrailing) {
+                    VStack(alignment: .leading, spacing: spacing) {
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "cloud")
+                                .font(.system(size: iconSize))
+                                .foregroundStyle(colors.text)
+                                .frame(width: iconSize + 2, alignment: .center)
+                            VStack(alignment: .leading, spacing: tight ? 1 : 2) {
+                                Text("上传  \(data.upload) KB/s")
+                                    .font(.system(size: labelSize, weight: .semibold))
+                                    .foregroundStyle(colors.text)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.65)
+                                Text("下载  \(data.download) KB/s")
+                                    .font(.system(size: labelSize, weight: .semibold))
+                                    .foregroundStyle(colors.text)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.65)
+                            }
+                        }
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "speaker.wave.2")
+                                .font(.system(size: iconSize - 1))
+                                .foregroundStyle(colors.text)
+                                .frame(width: iconSize + 2, alignment: .center)
+                            ThinProgressBar(progress: volumeProgress)
+                        }
+
+                        FanRow(
+                            label: "CPU/FAN",
+                            value: data.cpuFan,
+                            color: colors.accentYellow,
+                            labelWidth: fanLabelWidth,
+                            fontSize: labelSize,
+                            iconSize: iconSize - 2
+                        )
+                        FanRow(
+                            label: "GPU/FAN",
+                            value: data.gpuFan,
+                            color: gpuFanColor,
+                            labelWidth: fanLabelWidth,
+                            fontSize: labelSize,
+                            iconSize: iconSize - 2
+                        )
+
+                        Spacer(minLength: 0)
                     }
-                    .buttonStyle(.plain)
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                    .padding(.trailing, onToggleFullscreen == nil ? 0 : 18)
+                    .padding(.bottom, onToggleFullscreen == nil ? 0 : 2)
+
+                    if let onToggleFullscreen {
+                        Button(action: onToggleFullscreen) {
+                            Image(systemName: isFullscreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                                .foregroundStyle(colors.text)
+                                .font(.system(size: tight ? 12 : 14, weight: .semibold))
+                                .padding(2)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                .clipped()
             }
         }
     }
@@ -667,23 +698,28 @@ struct NetFanPanel: View {
         let label: String
         let value: String
         let color: Color
-        var density: PanelDensity
+        var labelWidth: CGFloat
+        var fontSize: CGFloat
+        var iconSize: CGFloat
         @Environment(\.dashColors) private var colors
 
         var body: some View {
-            HStack(spacing: 6) {
+            HStack(spacing: 4) {
                 Image(systemName: "fanblades")
-                    .font(.system(size: density == .compact ? 12 : 14))
+                    .font(.system(size: iconSize))
                     .foregroundStyle(colors.text)
+                    .frame(width: iconSize + 2, alignment: .center)
                 Text(label)
-                    .font(.system(size: density.labelSize))
+                    .font(.system(size: fontSize))
                     .foregroundStyle(colors.text)
-                    .frame(width: density == .compact ? 58 : 72, alignment: .leading)
-                Text("\(value) RPM")
-                    .font(.system(size: density.valueSize, weight: .bold))
-                    .foregroundStyle(color)
+                    .frame(width: labelWidth, alignment: .leading)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                Text("\(value) RPM")
+                    .font(.system(size: fontSize, weight: .bold))
+                    .foregroundStyle(color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
             }
         }
     }
