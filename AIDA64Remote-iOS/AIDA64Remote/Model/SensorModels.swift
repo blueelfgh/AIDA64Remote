@@ -29,6 +29,15 @@ enum ConnectionEvent: Sendable {
     case disconnected(message: String?)
 }
 
+struct DriveSnapshot: Equatable, Identifiable, Sendable {
+    var id: String { letter }
+    let letter: String
+    let title: String
+    let usage: String
+    let bar: Float
+    let temp: String
+}
+
 struct DashboardSnapshot: Equatable, Sendable {
     var cpuName: String = "—"
     var cpuTemp: String = "—"
@@ -59,15 +68,7 @@ struct DashboardSnapshot: Equatable, Sendable {
     var ramUsage: String = "—"
     var ramUsageBar: Float = 0
     var boardTemp: String = "—"
-    var driveCUsage: String = "—"
-    var driveCBar: Float = 0
-    var driveCTemp: String = "—"
-    var driveDUsage: String = "—"
-    var driveDBar: Float = 0
-    var driveDTemp: String = "—"
-    var driveEUsage: String = "—"
-    var driveEBar: Float = 0
-    var driveETemp: String = "—"
+    var drives: [DriveSnapshot] = []
     var date: String = "—"
     var time: String = "—"
     var upload: String = "—"

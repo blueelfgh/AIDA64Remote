@@ -92,8 +92,8 @@ final class SensorViewModel {
             uiState.errorMessage = nil
         case let .sensorsUpdated(sensors, labels):
             let values = SensorParser.toMap(sensors)
-            pushHistory(&fpsHistory, raw: values["Gph24p"] ?? values["SIV23"])
-            pushHistory(&gpuHistory, raw: values["Gph25p"] ?? values["SIV10"])
+            pushHistory(&fpsHistory, raw: values["Gph23p"] ?? values["SIV22"])
+            pushHistory(&gpuHistory, raw: values["Gph24p"] ?? values["SIV9"])
             uiState.status = .connected
             uiState.dashboard = values.toDashboard(
                 labels: labels,

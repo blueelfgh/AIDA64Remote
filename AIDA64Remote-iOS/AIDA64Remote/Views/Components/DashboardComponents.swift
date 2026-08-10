@@ -355,12 +355,25 @@ struct StoragePanel: View {
 
     var body: some View {
         DashPanel(density: density) {
-            VStack(spacing: density.metricSpacing + 2) {
-                DriveRow(name: "C盘使用率", usage: data.driveCUsage, bar: data.driveCBar, temp: data.driveCTemp, density: density)
-                DriveRow(name: "D盘使用率", usage: data.driveDUsage, bar: data.driveDBar, temp: data.driveDTemp, density: density)
-                DriveRow(name: "E盘使用率", usage: data.driveEUsage, bar: data.driveEBar, temp: data.driveETemp, density: density)
+            if data.drives.isEmpty {
+                Text("暂无磁盘数据")
+                    .font(.system(size: density.labelSize))
+                    .foregroundStyle(colors.muted)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: density.metricSpacing + 2) {
+                    ForEach(data.drives) { drive in
+                        DriveRow(
+                            name: drive.title,
+                            usage: drive.usage,
+                            bar: drive.bar,
+                            temp: drive.temp,
+                            density: density
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
     }
 

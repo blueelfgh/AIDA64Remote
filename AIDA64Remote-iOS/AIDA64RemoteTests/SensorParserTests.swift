@@ -4,44 +4,80 @@ import XCTest
 final class SensorParserTests: XCTestCase {
     func testParseRealSseSample() {
         let line =
-            "data: Page0|{|}Simple3|49°{|}SIV4|5487{|}Bar4p|100|#C0C0C0,#808080|#FFFFFF,#AAAAAA{|}SIV5|10{|}Gph24p|0|{|}Simple26|温度: 30°C{|}"
+            "data: Page0|{|}SIV3|4099{|}Bar3p|100|#C0C0C0,#808080|#FFFFFF,#AAAAAA{|}SIV4|14{|}Bar4p|14|#C0C0C0,#808080|#FFFFFF,#AAAAAA{|}SIV7|350{|}SIV11|98{|}Bar11p|98|#C0C0C0,#808080|#FFFFFF,#AAAAAA{|}SIV12|56{|}Simple18|9898 MB{|}Simple19|39%{|}Simple20|DDR4-2400{|}Simple26|温度: 40°C{|}Simple29|N/A°{|}Simple31|2026-08-10{|}SIV22|0{|}Gph23p|0{|}"
         let sensors = SensorParser.parse(line)
         let map = SensorParser.toMap(sensors)
 
-        XCTAssertEqual(map["Simple3"], "49°")
-        XCTAssertEqual(map["SIV4"], "5487")
-        XCTAssertEqual(map["Bar4p"], "100")
-        XCTAssertEqual(map["SIV5"], "10")
-        XCTAssertEqual(map["Gph24p"], "0")
-        XCTAssertEqual(map["Simple26"], "温度: 30°C")
+        XCTAssertEqual(map["SIV3"], "4099")
+        XCTAssertEqual(map["SIV4"], "14")
+        XCTAssertEqual(map["SIV11"], "98")
+        XCTAssertEqual(map["Simple20"], "DDR4-2400")
         XCTAssertFalse(sensors.contains { $0.id.hasPrefix("Page") })
-        XCTAssertEqual(
-            sensors.first { $0.id == "Simple3" },
-            SensorItem(id: "Simple3", value: "49°")
-        )
     }
 
-    func testDashboardMappingUsesSensorIds() {
+    func testDashboardMappingMatchesLiveAida64Page() {
         let values = [
-            "Simple3": "49°",
-            "SIV4": "5487",
-            "Bar4p": "100",
-            "SIV5": "10",
-            "Bar5p": "10",
-            "Simple26": "温度: 30°C",
-            "SIV22": "50",
+            "SIV3": "4099",
+            "Bar3p": "100",
+            "SIV4": "14",
+            "Bar4p": "14",
+            "SIV5": "",
+            "SIV6": "",
+            "SIV7": "350",
+            "Bar7p": "6",
+            "SIV9": "",
+            "SIV10": "N/A",
+            "Bar10p": "0",
+            "SIV11": "98",
+            "Bar11p": "98",
+            "SIV12": "56",
+            "Bar12p": "56",
+            "SIV13": "",
+            "Simple17": "6374 MB",
+            "Simple18": "9898 MB",
+            "Simple19": "39%",
+            "Simple20": "DDR4-2400",
+            "Simple26": "温度: 40°C",
+            "Simple28": "68°",
+            "Simple29": "N/A°",
+            "Simple30": "40°",
+            "Simple31": "2026-08-10",
+            "Simple32": "7d 04:58",
+            "SIV22": "0",
+            "SIV33": "2.4",
+            "SIV34": "2.9",
+            "SIV35": "2280",
+            "SIV36": "0",
         ]
         let dashboard = values.toDashboard(
-            labels: ["Label2": "Test CPU"],
-            fpsHistory: [1, 2, 3],
-            gpuHistory: [4, 5]
+            labels: ["Label2": "Intel Core i7-7700"],
+            fpsHistory: [0],
+            gpuHistory: []
         )
-        XCTAssertEqual(dashboard.cpuName, "Test CPU")
-        XCTAssertEqual(dashboard.cpuTemp, "49°")
-        XCTAssertEqual(dashboard.cpuClock, "5487")
+
+        XCTAssertEqual(dashboard.cpuName, "Intel Core i7-7700")
+        XCTAssertEqual(dashboard.cpuClock, "4099")
+        XCTAssertEqual(dashboard.cpuUsage, "14")
         XCTAssertEqual(dashboard.cpuClockBar, 1, accuracy: 0.001)
-        XCTAssertEqual(dashboard.driveCTemp, "30°C")
-        XCTAssertEqual(dashboard.volumeBar, 0.5, accuracy: 0.001)
-        XCTAssertEqual(dashboard.fpsHistory, [1, 2, 3])
+        XCTAssertEqual(dashboard.cpuUsageBar, 0.14, accuracy: 0.001)
+        XCTAssertEqual(dashboard.gpuClock, "350")
+        XCTAssertEqual(dashboard.vramUsed, "—")
+        XCTAssertEqual(dashboard.vramFree, "—")
+        XCTAssertEqual(dashboard.gpuTemp, "N/A°")
+        XCTAssertEqual(dashboard.drives.map(\.letter), ["C", "D"])
+        XCTAssertEqual(dashboard.drives[0].usage, "98")
+        XCTAssertEqual(dashboard.drives[0].temp, "40°C")
+        XCTAssertEqual(dashboard.drives[1].usage, "56")
+        XCTAssertFalse(dashboard.drives.contains { $0.letter == "E" })
+        XCTAssertEqual(dashboard.ramType, "DDR4-2400")
+        XCTAssertEqual(dashboard.ramUsed, "9898 MB")
+        XCTAssertEqual(dashboard.ramFree, "6374 MB")
+        XCTAssertEqual(dashboard.ramUsage, "39%")
+        XCTAssertEqual(dashboard.boardTemp, "40°")
+        XCTAssertEqual(dashboard.date, "2026-08-10")
+        XCTAssertEqual(dashboard.time, "7d 04:58")
+        XCTAssertEqual(dashboard.fps, "0")
+        XCTAssertEqual(dashboard.upload, "2.4")
+        XCTAssertEqual(dashboard.cpuFan, "2280")
     }
 }
