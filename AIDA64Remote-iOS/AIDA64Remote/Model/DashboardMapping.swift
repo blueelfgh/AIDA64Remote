@@ -1,8 +1,7 @@
 import Foundation
 
 extension Dictionary where Key == String, Value == String {
-    /// 按当前 AIDA64 RemoteSensor 页面传感器 ID 映射到仪表盘。
-    /// 对照 http://host:35080/ 标签：SIV3 频率、SIV4 使用率、SIV5–10 GPU、SIV11+ 磁盘等。
+    /// 与 Android `Models.kt` `toDashboard` 对齐的 AIDA64 RemoteSensor 字段映射。
     func toDashboard(
         labels: [String: String],
         fpsHistory: [Float],
@@ -41,7 +40,7 @@ extension Dictionary where Key == String, Value == String {
             return cleaned
         }
 
-        func firstTemp(_ ids: [String]) -> String {
+        func firstTemp(_ ids: String...) -> String {
             for id in ids {
                 let value = temp(id)
                 if value != "—" { return value }
@@ -49,42 +48,19 @@ extension Dictionary where Key == String, Value == String {
             return "—"
         }
 
-        func firstTemp(_ ids: String...) -> String {
-            firstTemp(Array(ids))
-        }
-
         let cpuName = (labels["Label2"] ?? "Intel Core")
             .replacingOccurrences(of: "&nbsp;", with: " ")
             .replacingOccurrences(of: "\u{00A0}", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let volumeRaw = Float(self["Bar21p"] ?? "")
-            ?? Float(self["Bar22p"] ?? "")
-            ?? Float(self["SIV21"] ?? "")
-            ?? 0
-
-        // SIV11–SIV20 对应 C–L；仅当使用率有值时才展示（避免扫到 SIV22 FPS / SIV35 风扇等）
-        let driveLetters = Array("CDEFGHIJKL")
-        let driveTempIds: [[String]] = [
-            ["Simple26", "Simple25"],
-            ["Simple27"],
-            ["Simple28"],
-            ["Simple35"],
-            ["Simple36"],
-            ["Simple37"],
-            ["Simple38"],
-            ["Simple39"],
-            ["Simple40"],
-            ["Simple41"],
+        // 对齐 Android：固定 C/D/E（SIV12–14）
+        let driveSpecs: [(letter: String, usageId: String, barId: String, tempIds: [String])] = [
+            ("C", "SIV12", "Bar12p", ["Simple28", "Simple26"]),
+            ("D", "SIV13", "Bar13p", ["Simple29", "Simple27"]),
+            ("E", "SIV14", "Bar14p", ["Simple30", "Simple28"]),
         ]
-        var drives: [DriveSnapshot] = []
-        for (index, letter) in driveLetters.enumerated() {
-            let n = 11 + index
-            let usageId = "SIV\(n)"
-            let usage = v(usageId, fallback: "")
-            guard !usage.isEmpty else { continue }
-            let temps = index < driveTempIds.count ? driveTempIds[index] : ["Simple\(25 + index)"]
-            let label = labels[usageId] ?? labels["SI\(n)"]
+        let drives: [DriveSnapshot] = driveSpecs.map { spec in
+            let label = labels[spec.usageId]
             let title: String = {
                 if let label {
                     let trimmed = label
@@ -93,59 +69,66 @@ extension Dictionary where Key == String, Value == String {
                         .trimmingCharacters(in: CharacterSet(charactersIn: "：:"))
                     if !trimmed.isEmpty { return trimmed }
                 }
-                return "\(letter)盘使用率"
+                return "\(spec.letter)盘使用率"
             }()
-            drives.append(
-                DriveSnapshot(
-                    letter: String(letter),
-                    title: title,
-                    usage: usage,
-                    bar: bar("Bar\(n)p"),
-                    temp: firstTemp(temps)
-                )
+            var driveTemp = "—"
+            for id in spec.tempIds {
+                let value = temp(id)
+                if value != "—" {
+                    driveTemp = value
+                    break
+                }
+            }
+            return DriveSnapshot(
+                letter: spec.letter,
+                title: title,
+                usage: v(spec.usageId),
+                bar: bar(spec.barId),
+                temp: driveTemp
             )
         }
 
+        let volumeRaw = Float(self["Bar22p"] ?? "") ?? 0
+
         return DashboardSnapshot(
             cpuName: cpuName.isEmpty ? "Intel Core" : cpuName,
-            cpuTemp: firstTemp("Simple3", "Simple24"),
-            cpuClock: v("SIV3"),
-            cpuClockBar: bar("Bar3p"),
-            cpuUsage: v("SIV4"),
-            cpuUsageBar: bar("Bar4p"),
-            gpuTemp: firstTemp("Simple29", "SIV10"),
-            vramUsed: v("SIV5"),
-            vramUsedBar: bar("Bar5p"),
-            vramFree: v("SIV6"),
-            vramFreeBar: bar("Bar6p"),
-            gpuClock: v("SIV7"),
-            gpuClockBar: bar("Bar7p"),
-            gpuMemClock: v("SIV8"),
-            gpuMemClockBar: bar("Bar8p"),
-            gpuUsage: v("SIV9"),
-            gpuUsageBar: bar("Bar9p"),
-            gpuTempBar: bar("Bar10p"),
-            fps: first("SIV22", "Gph23p", fallback: "0"),
+            cpuTemp: v("Simple3"),
+            cpuClock: v("SIV4"),
+            cpuClockBar: bar("Bar4p"),
+            cpuUsage: v("SIV5"),
+            cpuUsageBar: bar("Bar5p"),
+            gpuTemp: firstTemp("SIV11", "Simple31"),
+            vramUsed: v("SIV6"),
+            vramUsedBar: bar("Bar6p"),
+            vramFree: v("SIV7"),
+            vramFreeBar: bar("Bar7p"),
+            gpuClock: v("SIV8"),
+            gpuClockBar: bar("Bar8p"),
+            gpuMemClock: v("SIV9"),
+            gpuMemClockBar: bar("Bar9p"),
+            gpuUsage: v("SIV10"),
+            gpuUsageBar: bar("Bar10p"),
+            gpuTempBar: bar("Bar11p"),
+            fps: first("SIV25", "SIV23", fallback: "0"),
             fpsHistory: fpsHistory,
             gpuHistory: gpuHistory,
-            ramType: v("Simple20"),
-            ramUsed: v("Simple18"),
+            ramType: first("Simple23", "Simple21"),
+            ramUsed: first("Simple20", "Simple18"),
             ramUsedBar: bar("Bar15p"),
-            ramFree: v("Simple17"),
-            ramFreeBar: bar("Bar14p"),
-            ramUsage: v("Simple19"),
-            ramUsageBar: bar("Bar16p"),
-            // AIDA64 现网页没有独立 DIMM 温度；主板温度填入 RAM 槽 1，槽 2 留空。
-            ramTemp1: firstTemp("Simple30"),
-            ramTemp2: "—",
+            ramFree: first("Simple21", "Simple19"),
+            ramFreeBar: bar("Bar16p"),
+            ramUsage: first("Simple22", "Simple20"),
+            ramUsageBar: bar("Bar17p"),
+            ramTemp1: temp("SIV18"),
+            ramTemp2: temp("SIV19"),
             drives: drives,
-            date: v("Simple31"),
-            time: v("Simple32"),
-            upload: v("SIV33"),
-            download: v("SIV34"),
+            date: first("Simple33", "Simple31"),
+            time: first("Simple34", "Simple32"),
+            upload: first("SIV35", "SIV33"),
+            download: first("SIV36", "SIV34"),
             volumeBar: Swift.min(Swift.max(volumeRaw, 0), 100) / 100,
-            cpuFan: v("SIV35"),
-            gpuFan: v("SIV36")
+            cpuFan: first("SIV37", "SIV35"),
+            gpuFan: first("SIV38", "SIV36")
         )
     }
 }
