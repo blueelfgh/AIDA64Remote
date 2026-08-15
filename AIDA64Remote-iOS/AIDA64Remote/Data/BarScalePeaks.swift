@@ -1,18 +1,19 @@
 import Foundation
 
 /// 各进度条指标曾出现过的历史最大值（持久化，可在设置中清除）。
+/// 使用率类指标（CPU/GPU/内存）固定以 100% 为上限，不写入本结构。
 struct BarScalePeaks: Equatable, Codable, Sendable {
     var cpuClock: Float?
-    var cpuUsage: Float?
+    var cpuUsage: Float? // 保留字段以兼容旧持久化数据，不再更新
     var vramUsed: Float?
     var vramFree: Float?
     var gpuClock: Float?
     var gpuMemClock: Float?
-    var gpuUsage: Float?
+    var gpuUsage: Float? // 保留字段以兼容旧持久化数据，不再更新
     var gpuTemp: Float?
     var ramUsed: Float?
     var ramFree: Float?
-    var ramUsage: Float?
+    var ramUsage: Float? // 保留字段以兼容旧持久化数据，不再更新
     var ramTemp1: Float?
     var ramTemp2: Float?
     var driveC: Float?
@@ -45,12 +46,10 @@ struct BarScalePeaks: Equatable, Codable, Sendable {
 
         var next = self
         next.cpuClock = bump(cpuClock, dashboard.cpuClock)
-        next.cpuUsage = bump(cpuUsage, dashboard.cpuUsage)
         next.vramUsed = bump(vramUsed, dashboard.vramUsed)
         next.vramFree = bump(vramFree, dashboard.vramFree)
         next.gpuClock = bump(gpuClock, dashboard.gpuClock)
         next.gpuMemClock = bump(gpuMemClock, dashboard.gpuMemClock)
-        next.gpuUsage = bump(gpuUsage, dashboard.gpuUsage)
         next.gpuTemp = bump(gpuTemp, dashboard.gpuTemp)
         next.ramTemp1 = bump(ramTemp1, dashboard.ramTemp1)
         next.ramTemp2 = bump(ramTemp2, dashboard.ramTemp2)

@@ -256,7 +256,7 @@ struct CpuPanel: View {
                             value: data.cpuUsage,
                             unit: "%",
                             progress: data.cpuUsageBar,
-                            peakMax: barPeaks.cpuUsage,
+                            peakMax: 100,
                             density: density
                         )
                     }
@@ -288,7 +288,7 @@ struct GpuPanel: View {
             (short ? "可用显存" : "可用显存", data.vramFree, "MB", data.vramFreeBar, barPeaks.vramFree),
             (short ? "核心频率" : "GPU 核心频率", data.gpuClock, "MHz", data.gpuClockBar, barPeaks.gpuClock),
             (short ? "显存频率" : "GPU 显存频率", data.gpuMemClock, "MHz", data.gpuMemClockBar, barPeaks.gpuMemClock),
-            (short ? "使用率" : "GPU 使用率", data.gpuUsage, "%", data.gpuUsageBar, barPeaks.gpuUsage),
+            (short ? "使用率" : "GPU 使用率", data.gpuUsage, "%", data.gpuUsageBar, 100),
             (short ? "温度" : "GPU 温度", gpuTempDigits, "°C", data.gpuTempBar, barPeaks.gpuTemp),
         ]
     }
